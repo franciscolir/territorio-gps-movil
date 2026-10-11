@@ -336,12 +336,32 @@ async function refrescar({ ajustarMapa = false } = {}) {
     if (mapListo && ajustarMapa) ajustarVistaMapa();
     return;
   }
+  // Al recargar el navegador el token guardado puede estar expirado:
+  // se asegura vigencia antes de consultar (y reintenta si aun así falla)
+  await asegurarSesionVigente();
   await cargarAsignacion();
   if (sector) await cargarPuntos();
   if (mapListo && ajustarMapa) ajustarVistaMapa();
 }
 
-async function cargarAsignacion() {
+// Renueva la sesión si vence en menos de un minuto
+async function asegurarSesionVigente() {
+  try {
+    const { data } = await db.auth.getSession();
+    const expira = (data?.session?.expires_at ?? 0) * 1000;
+    if (data?.session && expira - Date.now() < 60000) {
+      await db.auth.refreshSession();
+    }
+  } catch (_) { /* sin sesión o sin señal: se sigue igual */ }
+}
+
+// ¿El error viene de un token viejo/invalido? (merece refresh + reintento)
+function esErrorDeSesion(error) {
+  const m = String(error?.message || '') + ' ' + String(error?.code || '') + ' ' + String(error?.status || '');
+  return /jwt|token|401|unauthorized|invalid api key/i.test(m);
+}
+
+async function cargarAsignacion({ reintentado = false } = {}) {
   const { data, error } = await db
     .from('sectores_asignaciones')
     .select('sector_id, estado, assigned_at, sectores ( id, nombre, comuna, color, geom )')
@@ -349,6 +369,10 @@ async function cargarAsignacion() {
     .eq('estado', 'activa')
     .maybeSingle();
   if (error) {
+    if (!esErrorDeRed(error) && !reintentado && esErrorDeSesion(error)) {
+      try { await db.auth.refreshSession(); } catch (_) {}
+      return cargarAsignacion({ reintentado: true });
+    }
     // red caída: conserva el sector en memoria; otro error (columna faltante,
     // grants/RLS) se avisa para no confundirlo con "sin sector asignado"
     errorSector = error.message;
@@ -1218,7 +1242,13 @@ $('headerSync').addEventListener('click', () => { irA('sync'); sincronizar(); })
 
 window.addEventListener('online', () => { pintarCola(); sincronizar(); });
 window.addEventListener('offline', pintarCola);
-setInterval(() => { if (cola.length && navigator.onLine) sincronizar(); }, 45000);
+// Refresco periódico: si hay cola, sincroniza; si no, refresca datos en
+// silencio (recupera la app si una carga inicial falló, p. ej. token vencido)
+setInterval(() => {
+  if (!user || !navigator.onLine) return;
+  if (cola.length) { sincronizar(); return; }
+  refrescar({ ajustarMapa: true }).then(() => pintarTodo()).catch(() => {});
+}, 45000);
 
 // ============================================================
 // ARRANQUE
