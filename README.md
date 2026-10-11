@@ -7,6 +7,8 @@ Web-app para **colaboradores de terreno** del proyecto Territorio GPS
 - Crea y edita puntos, cambia estados (`pendiente`, `visitado`, `erróneo`, `no_pasar`) y **devuelve el sector** cuando termina.
 - **Cola offline**: sin señal, todo queda guardado en el teléfono (localStorage) y se sincroniza solo al volver la conexión.
 - Mapa MapLibre con el polígono del sector, pines por estado y navegación a Google Maps.
+- **GPS del dispositivo**: al iniciar pide activar la ubicación; si se concede muestra "GPS ACTIVO" en el header y un punto azul con tu posición en el mapa; si no, "UBICACIÓN NO DISPONIBLE".
+- **Configuración** (engranaje en el header): tema **claro/oscuro** y **app de direcciones** (Google Maps, Waze o Mapas de iOS) que se abre al tocar "Cómo llegar".
 
 > Este repo se **extrajo** de [`territorio-gps`](../territorio-gps) (repo principal con la
 > app de escritorio/central, esquema SQL y migraciones). Comparte la **misma base

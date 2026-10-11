@@ -48,6 +48,20 @@ let confirmAction = null;
 let syncRunning = false;
 let opSeq = 0;
 
+// Configuración local (persistida en localStorage)
+let appMapa = 'google';   // 'google' | 'waze' | 'apple'
+let tema = 'claro';       // 'claro' | 'oscuro'
+try { const g = localStorage.getItem('gps_app_mapa'); if (g) appMapa = g; } catch (_) {}
+try { if (localStorage.getItem('gps_tema') === 'oscuro') tema = 'oscuro'; } catch (_) {}
+document.documentElement.classList.toggle('dark', tema === 'oscuro');
+
+// GPS del dispositivo
+let gpsEstado = 'pendiente'; // 'activo' | 'pendiente' | 'nodisponible'
+let gpsWatchId = null;
+let gpsUltima = null;        // { lat, lng }
+let gpsIntentado = false;
+let markerUsuario = null;
+
 const $ = (id) => document.getElementById(id);
 
 // ============================================================
@@ -91,7 +105,7 @@ document.querySelectorAll('[data-close]').forEach((b) => {
   b.addEventListener('click', () => sheetClose(b.dataset.close));
 });
 // Clic fuera de la hoja = cerrar
-for (const id of ['statusSheet', 'pointSheet', 'confirmSheet']) {
+for (const id of ['statusSheet', 'pointSheet', 'confirmSheet', 'configSheet']) {
   $(id).addEventListener('click', (e) => { if (e.target === $(id)) sheetClose(id); });
 }
 
@@ -108,6 +122,157 @@ $('btnConfirmYes').addEventListener('click', () => {
   confirmAction = null;
   if (a) a();
 });
+
+// ============================================================
+// GPS DEL DISPOSITIVO
+// Pide permiso al entrar: activo → punto azul en el mapa y "GPS ACTIVO"
+// en el header; denegado/sin señal → "UBICACIÓN NO DISPONIBLE".
+// ============================================================
+function setGpsEstado(estado) {
+  gpsEstado = estado;
+  const dot = $('gpsDot');
+  const txt = $('headerEstado');
+  dot.classList.remove('bg-on-tertiary-container', 'bg-error', 'bg-surface-variant', 'animate-pulse');
+  if (estado === 'activo') {
+    dot.classList.add('bg-on-tertiary-container', 'animate-pulse');
+    txt.textContent = 'GPS ACTIVO';
+  } else if (estado === 'pendiente') {
+    dot.classList.add('bg-surface-variant');
+    txt.textContent = 'ACTIVAR UBICACIÓN';
+  } else {
+    dot.classList.add('bg-error');
+    txt.textContent = 'UBICACIÓN NO DISPONIBLE';
+  }
+  pintarGpsConfig();
+}
+
+function activarGps() {
+  if (!navigator.geolocation) { setGpsEstado('nodisponible'); return; }
+  if (gpsWatchId != null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  setGpsEstado('pendiente');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      gpsUltima = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setGpsEstado('activo');
+      ponerMarcadorUsuario();
+      gpsWatchId = navigator.geolocation.watchPosition((p) => {
+        gpsUltima = { lat: p.coords.latitude, lng: p.coords.longitude };
+        ponerMarcadorUsuario();
+      }, () => {}, { enableHighAccuracy: true, maximumAge: 15000 });
+    },
+    () => setGpsEstado('nodisponible'),
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+  );
+}
+
+function detenerGps() {
+  if (gpsWatchId != null) {
+    navigator.geolocation?.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  if (markerUsuario) { markerUsuario.remove(); markerUsuario = null; }
+  gpsUltima = null;
+  gpsIntentado = false;
+  setGpsEstado('pendiente');
+}
+
+function ponerMarcadorUsuario() {
+  if (!mapListo || !map || !gpsUltima) return;
+  if (!markerUsuario) {
+    const el = document.createElement('div');
+    el.className = 'user-dot';
+    markerUsuario = new maplibregl.Marker({ element: el })
+      .setLngLat([gpsUltima.lng, gpsUltima.lat])
+      .addTo(map);
+  } else {
+    markerUsuario.setLngLat([gpsUltima.lng, gpsUltima.lat]);
+  }
+}
+
+// ============================================================
+// CONFIGURACIÓN (tema · app de mapas · GPS)
+// ============================================================
+function aplicarTema(t) {
+  tema = t;
+  try { localStorage.setItem('gps_tema', t); } catch (_) {}
+  document.documentElement.classList.toggle('dark', t === 'oscuro');
+  pintarConfig();
+}
+
+function pintarConfig() {
+  const oscuro = tema === 'oscuro';
+  for (const par of [[$('temaClaroBtn'), !oscuro], [$('temaOscuroBtn'), oscuro]]) {
+    par[0].classList.toggle('bg-surface-container-lowest', par[1]);
+    par[0].classList.toggle('text-primary', par[1]);
+    par[0].classList.toggle('shadow-sm', par[1]);
+    par[0].classList.toggle('text-on-surface-variant', !par[1]);
+  }
+  document.querySelectorAll('[data-app]').forEach((b) => {
+    const activo = b.dataset.app === appMapa;
+    b.classList.toggle('bg-primary', activo);
+    b.classList.toggle('text-on-primary', activo);
+    b.classList.toggle('bg-surface-container-lowest', !activo);
+    b.classList.toggle('text-on-surface-variant', !activo);
+  });
+  pintarGpsConfig();
+}
+
+function pintarGpsConfig() {
+  const textos = {
+    activo: 'GPS activo: tu ubicación se muestra en el mapa.',
+    pendiente: 'Toca para activar la ubicación del dispositivo.',
+    nodisponible: 'Ubicación no disponible: permiso denegado o GPS apagado.',
+  };
+  $('gpsConfigEstado').textContent = textos[gpsEstado] || textos.pendiente;
+  $('btnGpsConfigLabel').textContent = gpsEstado === 'nodisponible' ? 'Reintentar' : 'Activar ubicación';
+  $('btnGpsConfig').classList.toggle('hidden', gpsEstado === 'activo');
+}
+
+// Links de navegación según la app elegida en Configuración
+function linkComoLlegar(lat, lng) {
+  if (appMapa === 'waze') return `https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+  if (appMapa === 'apple') {
+    const esApple = /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+    return esApple
+      ? `maps://?daddr=${lat},${lng}&dirflg=d`
+      : `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`;
+  }
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+
+function homeAppMapa() {
+  return { google: 'https://www.google.com/maps', waze: 'https://waze.com', apple: 'https://maps.apple.com' }[appMapa]
+    || 'https://www.google.com/maps';
+}
+
+function abrirRuta(lat, lng) {
+  const url = linkComoLlegar(lat, lng);
+  // El esquema maps:// no abre en pestaña nueva: navega directo
+  if (/^maps:/i.test(url)) { window.location.href = url; return; }
+  window.open(url, '_blank', 'noopener');
+}
+
+$('btnConfig').addEventListener('click', () => { pintarConfig(); sheetOpen('configSheet'); });
+$('temaClaroBtn').addEventListener('click', () => aplicarTema('claro'));
+$('temaOscuroBtn').addEventListener('click', () => aplicarTema('oscuro'));
+document.querySelectorAll('[data-app]').forEach((b) => {
+  b.addEventListener('click', () => {
+    appMapa = b.dataset.app;
+    try { localStorage.setItem('gps_app_mapa', appMapa); } catch (_) {}
+    pintarConfig();
+  });
+});
+$('btnGpsConfig').addEventListener('click', activarGps);
+$('btnGpsEstado').addEventListener('click', () => { if (gpsEstado !== 'activo') activarGps(); });
+$('btnCentrar').addEventListener('click', () => {
+  if (!map) return;
+  if (!gpsUltima) { activarGps(); toast('Activando ubicación…'); return; }
+  map.flyTo({ center: [gpsUltima.lng, gpsUltima.lat], zoom: Math.max(map.getZoom(), 16), duration: 400 });
+});
+setGpsEstado('pendiente');
 
 // ============================================================
 // AUTH
@@ -127,6 +292,7 @@ async function doLogin() {
 $('btnLogout').addEventListener('click', async () => {
   await db.auth.signOut();
   user = null; sector = null; puntos = [];
+  detenerGps();
   $('appView').classList.add('hidden');
   $('emptyView').classList.add('hidden');
   $('emptyView').classList.remove('flex');
@@ -145,6 +311,10 @@ async function entrar(u) {
   cola = leerCola();
   await refrescar({ ajustarMapa: true });
   pintarTodo();
+  if (!gpsIntentado) {
+    gpsIntentado = true;
+    activarGps();
+  }
 }
 
 $('btnReloadSector').addEventListener('click', async () => {
@@ -332,9 +502,7 @@ function pintarLista() {
   box.innerHTML = todo.map((p) => {
     const est = p.estado || 'pendiente';
     const coords = coordsDe(p);
-    const nav = coords
-      ? `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`
-      : 'https://www.google.com/maps';
+    const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
     return `
     <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3" data-id="${escapeHtml(p.id)}">
       <div class="flex items-start justify-between gap-3">
@@ -423,7 +591,6 @@ function initMap() {
     zoom: 14,
     attributionControl: { compact: true },
   });
-  map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false }), 'top-right');
 
   map.on('load', () => {
     if (geom) {
@@ -440,6 +607,7 @@ function initMap() {
     mapListo = true;
     ajustarVistaMapa();
     actualizarCapaPuntos();
+    ponerMarcadorUsuario();
 
     // Tocar el mapa en el modo lista no crea puntos: solo en la vista mapa
     map.on('click', (e) => {
@@ -523,9 +691,7 @@ function abrirFicha(id) {
     + (p.user_id === user.id ? '<span class="text-[11px] font-bold text-secondary bg-surface-container px-2 py-1 rounded">CREADO POR TI</span>' : '');
 
   const coords = coordsDe(p);
-  $('btnPointNav').href = coords
-    ? `https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`
-    : 'https://www.google.com/maps';
+  $('btnPointNav').href = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
   $('btnPointNav').classList.toggle('hidden', !coords);
   $('btnPointStatus').classList.remove('hidden');
   $('btnPointDelete').classList.toggle('hidden', p.user_id !== user.id);
@@ -747,14 +913,10 @@ $('btnDevolver').addEventListener('click', () => {
 $('btnNavegar').addEventListener('click', () => {
   const siguiente = puntos.find((p) => (p.estado || 'pendiente') === 'pendiente') || puntos[0];
   const c = siguiente ? coordsDe(siguiente) : null;
-  const destino = c
-    ? `${c.lat},${c.lng}`
-    : (() => {
-        const bb = bboxDeGeometria(sector?.sectores?.geom);
-        return bb ? `${(bb[0][1] + bb[1][1]) / 2},${(bb[0][0] + bb[1][0]) / 2}` : '';
-      })();
-  if (!destino) { toast('Sin coordenadas para navegar', { error: true }); return; }
-  window.open(`https://www.google.com/maps/dir/?api=1&destination=${destino}`, '_blank', 'noopener');
+  if (c) { abrirRuta(c.lat, c.lng); return; }
+  const bb = bboxDeGeometria(sector?.sectores?.geom);
+  if (bb) { abrirRuta((bb[0][1] + bb[1][1]) / 2, (bb[0][0] + bb[1][0]) / 2); return; }
+  toast('Sin coordenadas para navegar', { error: true });
 });
 
 // ============================================================

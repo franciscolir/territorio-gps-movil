@@ -9,6 +9,8 @@
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "primary": "#00223d", "on-surface": "#0d1c2e", "primary-fixed": "#d0e4ff", "secondary": "#1d4ed8", "surface-container-highest": "#d5e3fc", "outline": "#73777f", "surface-container": "#e6eeff", "surface-tint": "#3e6185", "on-primary-container": "#7fa2c9", "on-error": "#ffffff", "on-secondary-fixed-variant": "#0039b5", "outline-variant": "#c3c7cf", "surface-container-lowest": "#ffffff", "primary-container": "#0f385a", "surface": "#f8f9ff", "error-container": "#ffdad6", "tertiary-fixed-dim": "#79db8d", "tertiary": "#00270d", "surface-container-high": "#dce9ff", "on-primary": "#ffffff", "on-tertiary-fixed": "#00210a", "inverse-surface": "#233144", "inverse-on-surface": "#eaf1ff", "secondary-fixed-dim": "#b7c4ff", "on-primary-fixed": "#001d35", "tertiary-fixed": "#95f8a7", "on-secondary-fixed": "#001551", "surface-dim": "#ccdbf3", "primary-fixed-dim": "#a7caf3", "error": "#ba1a1a", "on-tertiary-container": "#50b168", "on-error-container": "#93000a", "surface-bright": "#f8f9ff", "tertiary-container": "#003f19", "on-secondary": "#ffffff", "on-surface-variant": "#42474e", "secondary-container": "#4069f2", "on-tertiary": "#ffffff", "background": "#f8f9ff", "on-background": "#0d1c2e", "on-primary-fixed-variant": "#24496c", "surface-variant": "#d5e3fc", "on-tertiary-fixed-variant": "#005323", "surface-container-low": "#eff4ff", "inverse-primary": "#a7caf3", "on-secondary-container": "#fffbff", "secondary-fixed": "#dce1ff" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "space-xs": "0.25rem", "space-xl": "1.5rem", "gutter": "1rem", "space-lg": "1rem", "gutter-mobile": "0.75rem", "margin-mobile": "1rem", "space-sm": "0.5rem", "margin": "1.5rem", "space-md": "0.75rem" }, fontFamily: { "label-sm": ["Inter"], "display-lg": ["Inter"], "headline-md": ["Inter"], "body-md": ["Inter"], "body-sm": ["Inter"], "headline-sm": ["Inter"], "headline-lg": ["Inter"], "label-lg": ["Inter"], "code-sm": ["Inter"], "label-md": ["Inter"], "body-lg": ["Inter"] }, fontSize: { "label-sm": ["11px", { lineHeight: "14px", letterSpacing: "0.04em", fontWeight: "700" }], "display-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }], "headline-md": ["20px", { lineHeight: "28px", fontWeight: "600" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "body-sm": ["13px", { lineHeight: "18px", fontWeight: "400" }], "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }], "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "700" }], "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }], "code-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" }], "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }] } } } };</script>
+  <!-- Aplica el tema guardado antes del primer render para evitar destello -->
+  <script>try { if (localStorage.getItem('gps_tema') === 'oscuro') document.documentElement.classList.add('dark'); } catch (_) {}</script>
   <style>
     @layer base {
       html, body { width: 100%; margin: 0; padding: 0; }
@@ -44,6 +46,37 @@
     .spin-slow { animation: spin 2.4s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .sheet { transition: transform .18s ease; }
+    /* Punto azul de mi ubicación en el mapa */
+    .user-dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #1d4ed8; border: 3px solid #fff;
+      box-shadow: 0 0 0 8px rgba(29, 78, 216, .22), 0 2px 6px rgba(0, 0, 0, .35);
+    }
+    /* ---- Tema oscuro: sobrescribe los tokens claros bajo html.dark ---- */
+    html.dark .bg-surface { background-color: #0e141b; }
+    html.dark .bg-surface\/95 { background-color: rgba(14, 20, 27, .95); }
+    html.dark .bg-surface-container-lowest { background-color: #171d26; }
+    html.dark .bg-surface-container-lowest\/95 { background-color: rgba(23, 29, 38, .95); }
+    html.dark .bg-surface-container-low { background-color: #1c232d; }
+    html.dark .bg-surface-container { background-color: #222a34; }
+    html.dark .bg-surface-container-high { background-color: #2d3540; }
+    html.dark .active\:bg-surface-container-high:active { background-color: #333b47; }
+    html.dark .bg-surface-container-highest { background-color: #38404c; }
+    html.dark .bg-surface-variant { background-color: #38404c; }
+    html.dark .text-on-surface { color: #dfe4ec; }
+    html.dark .text-on-surface-variant { color: #9aa6b2; }
+    html.dark .text-primary { color: #a7caf3; }
+    html.dark .bg-primary { background-color: #a7caf3; }
+    html.dark .text-on-primary { color: #00223d; }
+    html.dark .text-secondary { color: #9fc0ff; }
+    html.dark .bg-secondary { background-color: #3b63e8; }
+    html.dark .text-error { color: #ffb4ab; }
+    html.dark .bg-error-container { background-color: #5f1c1c; }
+    html.dark .text-on-error-container { color: #ffdad6; }
+    html.dark .bg-tertiary-fixed { background-color: #0d4d24; }
+    html.dark .text-on-tertiary-fixed { color: #95f8a7; }
+    html.dark .text-on-tertiary { color: #95f8a7; }
+    html.dark .border-outline-variant { border-color: #444d59; }
   </style>
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
@@ -107,10 +140,10 @@
     <header class="fixed top-0 w-full z-40 bg-surface/95 backdrop-blur shadow-sm pt-safe">
       <div class="h-16 px-4 flex items-center justify-between gap-3">
         <div class="flex flex-col min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="inline-block w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
-            <span class="text-[10px] uppercase tracking-widest font-bold text-primary truncate" id="headerEstado">GPS ACTIVO</span>
-          </div>
+          <button id="btnGpsEstado" class="flex items-center gap-2" title="Estado de la ubicación">
+            <span id="gpsDot" class="inline-block w-2 h-2 rounded-full bg-surface-variant"></span>
+            <span class="text-[10px] uppercase tracking-widest font-bold text-primary truncate" id="headerEstado">ACTIVAR UBICACIÓN</span>
+          </button>
           <h1 class="text-base font-bold text-on-surface truncate">Hoja de Ruta</h1>
           <p id="userEmail" class="text-xs text-on-surface-variant truncate"></p>
         </div>
@@ -118,6 +151,9 @@
           <button id="headerSync" class="min-w-[44px] h-11 px-2 bg-surface-container rounded-lg flex items-center justify-center gap-1" title="Pendientes de sincronizar">
             <span class="material-symbols-outlined text-secondary text-[20px]" id="headerSyncIcon">cloud_done</span>
             <span class="text-xs font-bold text-primary" id="headerSyncCount"></span>
+          </button>
+          <button id="btnConfig" class="w-11 h-11 rounded-full bg-surface-container flex items-center justify-center" title="Configuración">
+            <span class="material-symbols-outlined text-on-surface text-[20px]">settings</span>
           </button>
           <button id="btnLogout" class="w-11 h-11 rounded-full bg-primary flex items-center justify-center" title="Cerrar sesión">
             <span class="material-symbols-outlined text-on-primary text-[20px]">person</span>
@@ -223,6 +259,9 @@
       <div id="mapView" class="hidden flex-col w-full px-4 pt-2 gap-3">
         <div class="relative w-full h-[55vh] rounded-xl overflow-hidden bg-surface-container shadow-sm">
           <div id="mapMovil"></div>
+          <button id="btnCentrar" class="absolute top-2 right-2 w-11 h-11 rounded-xl bg-surface-container-lowest/95 backdrop-blur shadow-sm flex items-center justify-center" title="Centrar en mi ubicación">
+            <span class="material-symbols-outlined text-secondary text-[22px]">my_location</span>
+          </button>
           <div class="absolute bottom-2 left-2 right-2 bg-surface-container-lowest/95 backdrop-blur rounded-lg p-2 flex justify-around text-xs font-semibold pointer-events-none" id="mapLegend"></div>
         </div>
         <button id="btnNavegar" class="min-h-[48px] rounded-xl bg-primary text-on-primary text-sm font-semibold flex items-center justify-center gap-2 active:bg-secondary">
@@ -383,6 +422,61 @@
         <button id="btnConfirmNo" class="min-h-[52px] rounded-xl bg-surface-container text-on-surface font-semibold">Cancelar</button>
         <button id="btnConfirmYes" class="min-h-[52px] rounded-xl bg-error text-white font-bold">Confirmar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SHEET: configuración (tema · app de mapas · GPS)
+       ============================================================ -->
+  <div id="configSheet" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm items-end justify-center">
+    <div class="sheet w-full bg-surface-container-lowest rounded-t-2xl p-4 pb-8 flex flex-col gap-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div class="w-12 h-1 bg-surface-variant rounded-full mx-auto"></div>
+      <div class="flex justify-between items-center">
+        <h4 class="text-base font-bold text-on-surface">Configuración</h4>
+        <button data-close="configSheet" class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <section class="flex flex-col gap-2">
+        <span class="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Tema</span>
+        <div class="grid grid-cols-2 gap-1 bg-surface-container p-1 rounded-xl">
+          <button id="temaClaroBtn" class="min-h-[48px] rounded-lg bg-surface-container-lowest text-primary text-sm font-semibold shadow-sm flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">light_mode</span><span>Claro</span>
+          </button>
+          <button id="temaOscuroBtn" class="min-h-[48px] rounded-lg text-on-surface-variant text-sm font-semibold flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px]">dark_mode</span><span>Oscuro</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-2">
+        <span class="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">App para direcciones</span>
+        <p class="text-xs text-on-surface-variant">Se abre al tocar "Cómo llegar".</p>
+        <div class="flex flex-col gap-2">
+          <button data-app="google" class="appmapa min-h-[48px] rounded-xl bg-surface-container-lowest text-on-surface-variant text-sm font-semibold flex items-center justify-between px-4">
+            <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[20px]">map</span><span>Google Maps</span></span>
+            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+          <button data-app="waze" class="appmapa min-h-[48px] rounded-xl bg-surface-container-lowest text-on-surface-variant text-sm font-semibold flex items-center justify-between px-4">
+            <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[20px]">near_me</span><span>Waze</span></span>
+            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+          <button data-app="apple" class="appmapa min-h-[48px] rounded-xl bg-surface-container-lowest text-on-surface-variant text-sm font-semibold flex items-center justify-between px-4">
+            <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[20px]">phone_iphone</span><span>Mapas (iOS)</span></span>
+            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-2">
+        <span class="text-xs font-semibold text-on-surface-variant uppercase tracking-wide">Ubicación</span>
+        <p class="text-xs text-on-surface-variant" id="gpsConfigEstado">—</p>
+        <button id="btnGpsConfig" class="min-h-[48px] rounded-xl bg-surface-container text-secondary text-sm font-semibold flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[20px]">my_location</span>
+          <span id="btnGpsConfigLabel">Activar ubicación</span>
+        </button>
+      </section>
     </div>
   </div>
 
