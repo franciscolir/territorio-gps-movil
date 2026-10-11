@@ -509,41 +509,69 @@ function pintarLista() {
     const est = p.estado || 'pendiente';
     const coords = coordsDe(p);
     const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
+    const local = !!p.local;
+    const estadosRapidos = ESTADOS.map(([valor, etiqueta]) => {
+      const activo = valor === est;
+      const cls = activo ? CLASES_ESTADO_ACTIVO[valor] : 'bg-surface-container text-on-surface-variant';
+      return `
+        <button class="min-h-[44px] rounded-lg ${cls} text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 active:opacity-80"
+                data-estado-rapido="${escapeHtml(p.id)}" data-valor="${valor}"
+                ${local ? 'disabled' : ''}>
+          <span class="material-symbols-outlined text-[18px]">${ICONOS_ESTADO[valor]}</span>
+          <span>${etiqueta}</span>
+        </button>`;
+    }).join('');
     return `
     <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3" data-id="${escapeHtml(p.id)}">
       <div class="flex items-start justify-between gap-3">
         <div class="flex flex-col min-w-0 cursor-pointer" data-abrir="${escapeHtml(p.id)}">
-          <span class="text-[11px] font-bold text-on-surface-variant">${p.local ? 'NUEVO · PENDIENTE SYNC' : 'PDV'}</span>
-          <h3 class="text-base font-bold text-on-surface truncate">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
-          <p class="text-sm text-on-surface-variant">${escapeHtml(p.direccion || (coords ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Sin dirección'))}</p>
+          <span class="text-[11px] font-bold text-on-surface-variant">${local ? 'NUEVO · PENDIENTE SYNC' : 'PDV'}</span>
+          <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+          <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || 'Sin dirección')}</p>
         </div>
         ${chipEstado(est)}
       </div>
+      ${coords ? `
+      <div class="flex items-center gap-1 text-xs text-on-surface-variant">
+        <span class="material-symbols-outlined text-[14px]">location_on</span>
+        <span>${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}</span>
+      </div>` : ''}
       ${p.notas ? `
       <div class="bg-surface-container-low p-2 rounded-lg flex items-center gap-2">
         <span class="material-symbols-outlined text-secondary text-[18px] shrink-0">info</span>
         <p class="text-xs text-on-surface-variant italic truncate">"${escapeHtml(p.notas)}"</p>
       </div>` : ''}
       <div class="grid grid-cols-2 gap-2">
-        <a class="min-h-[48px] rounded-xl bg-surface-container text-primary text-sm font-semibold flex items-center justify-center gap-2 active:bg-surface-container-high"
-           href="${nav}" target="_blank" rel="noopener">
-          <span class="material-symbols-outlined text-[20px]">near_me</span><span>Cómo llegar</span>
+        <a class="min-h-[44px] rounded-lg bg-surface-container flex items-center justify-center active:bg-surface-container-high"
+           href="${nav}" target="_blank" rel="noopener" title="Cómo llegar" aria-label="Cómo llegar">
+          <span class="material-symbols-outlined text-primary text-[20px]">near_me</span>
         </a>
-        <button class="min-h-[48px] rounded-xl bg-primary text-on-primary text-sm font-semibold flex items-center justify-center gap-2 active:bg-secondary"
-                data-estado="${escapeHtml(p.id)}" data-nombre="${escapeHtml(p.nombre || '')}" ${p.local ? 'disabled' : ''}>
-          <span class="material-symbols-outlined text-[20px]">edit</span><span>Cambiar estado</span>
+        <button class="min-h-[44px] rounded-lg bg-surface-container flex items-center justify-center active:bg-surface-container-high"
+                data-abrir="${escapeHtml(p.id)}" title="Notas / Editar" aria-label="Notas y edición"
+                ${local ? 'disabled' : ''}>
+          <span class="material-symbols-outlined text-primary text-[20px]">edit</span>
         </button>
       </div>
+      <div class="grid grid-cols-4 gap-1">${estadosRapidos}</div>
     </article>`;
   }).join('');
 
   box.querySelectorAll('[data-abrir]').forEach((el) => {
     el.addEventListener('click', () => abrirFicha(el.dataset.abrir));
   });
-  box.querySelectorAll('[data-estado]').forEach((b) => {
-    b.addEventListener('click', () => abrirStatusSheet(b.dataset.estado, b.dataset.nombre));
+  box.querySelectorAll('[data-estado-rapido]').forEach((b) => {
+    b.addEventListener('click', () => aplicarEstado(b.dataset.estadoRapido, b.dataset.valor));
   });
 }
+
+// Iconos y clases de los botones de estado rápido de la card
+const ICONOS_ESTADO = { pendiente: 'schedule', visitado: 'check_circle', erroneo: 'cancel', no_pasar: 'block' };
+const CLASES_ESTADO_ACTIVO = {
+  pendiente: 'bg-surface-container-highest text-on-surface',
+  visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
+  erroneo: 'bg-error-container text-on-error-container',
+  no_pasar: 'bg-surface-container-high text-secondary',
+};
 
 function chipEstado(est) {
   const mapa = {
