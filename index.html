@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport" />
+  <title>Terreno · Gestión de Puntos RM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet" />
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "primary": "#00223d", "on-surface": "#0d1c2e", "primary-fixed": "#d0e4ff", "secondary": "#1d4ed8", "surface-container-highest": "#d5e3fc", "outline": "#73777f", "surface-container": "#e6eeff", "surface-tint": "#3e6185", "on-primary-container": "#7fa2c9", "on-error": "#ffffff", "on-secondary-fixed-variant": "#0039b5", "outline-variant": "#c3c7cf", "surface-container-lowest": "#ffffff", "primary-container": "#0f385a", "surface": "#f8f9ff", "error-container": "#ffdad6", "tertiary-fixed-dim": "#79db8d", "tertiary": "#00270d", "surface-container-high": "#dce9ff", "on-primary": "#ffffff", "on-tertiary-fixed": "#00210a", "inverse-surface": "#233144", "inverse-on-surface": "#eaf1ff", "secondary-fixed-dim": "#b7c4ff", "on-primary-fixed": "#001d35", "tertiary-fixed": "#95f8a7", "on-secondary-fixed": "#001551", "surface-dim": "#ccdbf3", "primary-fixed-dim": "#a7caf3", "error": "#ba1a1a", "on-tertiary-container": "#50b168", "on-error-container": "#93000a", "surface-bright": "#f8f9ff", "tertiary-container": "#003f19", "on-secondary": "#ffffff", "on-surface-variant": "#42474e", "secondary-container": "#4069f2", "on-tertiary": "#ffffff", "background": "#f8f9ff", "on-background": "#0d1c2e", "on-primary-fixed-variant": "#24496c", "surface-variant": "#d5e3fc", "on-tertiary-fixed-variant": "#005323", "surface-container-low": "#eff4ff", "inverse-primary": "#a7caf3", "on-secondary-container": "#fffbff", "secondary-fixed": "#dce1ff" }, borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, spacing: { "space-xs": "0.25rem", "space-xl": "1.5rem", "gutter": "1rem", "space-lg": "1rem", "gutter-mobile": "0.75rem", "margin-mobile": "1rem", "space-sm": "0.5rem", "margin": "1.5rem", "space-md": "0.75rem" }, fontFamily: { "label-sm": ["Inter"], "display-lg": ["Inter"], "headline-md": ["Inter"], "body-md": ["Inter"], "body-sm": ["Inter"], "headline-sm": ["Inter"], "headline-lg": ["Inter"], "label-lg": ["Inter"], "code-sm": ["Inter"], "label-md": ["Inter"], "body-lg": ["Inter"] }, fontSize: { "label-sm": ["11px", { lineHeight: "14px", letterSpacing: "0.04em", fontWeight: "700" }], "display-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }], "headline-md": ["20px", { lineHeight: "28px", fontWeight: "600" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "body-sm": ["13px", { lineHeight: "18px", fontWeight: "400" }], "headline-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }], "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "700" }], "label-lg": ["14px", { lineHeight: "20px", letterSpacing: "0.01em", fontWeight: "600" }], "code-sm": ["12px", { lineHeight: "16px", fontWeight: "500" }], "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "600" }], "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }] } } } };</script>
+  <style>
+    @layer base {
+      html, body { width: 100%; margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    /* Mapa a pantalla completa dentro de su contenedor */
+    #mapMovil { position: absolute; inset: 0; }
+    .maplibregl-ctrl-attrib { font-size: 10px; }
+    /* Pines: el wrapper lo transforma MapLibre (translate inline + origin
+       0 0); el dibujo vive en el hijo .pin para poder escalarlo en hover
+       sin desplazarlo de su coordenada (mismo fix que la app admin). */
+    .pin-wrap {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .pin {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid #fff; box-shadow: 0 3px 9px rgba(13,28,46,.4);
+      transition: scale .14s ease, box-shadow .14s ease;
+    }
+    .pin-wrap:active .pin { scale: 1.08; }
+    .pin .pin-ic { font-size: 15px; line-height: 1; }
+    .pin[data-est="pendiente"] { background: #0f385a; color: #fff; }
+    .pin[data-est="visitado"] { background: #95f8a7; color: #00210a; }
+    .pin[data-est="erroneo"] { background: #ba1a1a; color: #fff; }
+    .pin[data-est="no_pasar"] { background: #4069f2; color: #fff; }
+    .pin.is-nuevo { outline: 3px solid #ba1a1a; outline-offset: 2px; }
+    .spin-slow { animation: spin 2.4s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sheet { transition: transform .18s ease; }
+  </style>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
+</head>
+
+<body class="bg-surface font-sans text-on-surface antialiased flex flex-col min-h-screen">
+
+  <!-- ============================================================
+       LOGIN (misma Supabase Auth que la app de escritorio)
+       ============================================================ -->
+  <div id="loginView" class="fixed inset-0 z-50 bg-surface flex flex-col items-center justify-center px-8">
+    <div class="w-full max-w-sm flex flex-col gap-4">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center">
+          <span class="material-symbols-outlined text-on-primary text-[26px]">location_on</span>
+        </div>
+        <div>
+          <p class="text-[11px] uppercase tracking-widest font-bold text-secondary">Terreno</p>
+          <h1 class="text-xl font-bold text-on-surface leading-tight">Gestión de Puntos · RM</h1>
+        </div>
+      </div>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs font-semibold text-on-surface-variant">Correo</span>
+        <input id="loginEmail" type="email" inputmode="email" autocomplete="username"
+               class="min-h-[48px] px-4 rounded-xl bg-surface-container-lowest border border-outline-variant focus:border-secondary outline-none" />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs font-semibold text-on-surface-variant">Contraseña</span>
+        <input id="loginPass" type="password" autocomplete="current-password"
+               class="min-h-[48px] px-4 rounded-xl bg-surface-container-lowest border border-outline-variant focus:border-secondary outline-none" />
+      </label>
+      <p id="loginError" class="text-sm text-error min-h-[20px]"></p>
+      <button id="loginBtn"
+              class="min-h-[52px] rounded-xl bg-primary text-on-primary font-semibold text-base active:bg-secondary">
+        Entrar
+      </button>
+      <p class="text-xs text-on-surface-variant text-center">Solo para cuadrillas con sector asignado</p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SIN SECTOR ASIGNADO (o sector devuelto)
+       ============================================================ -->
+  <div id="emptyView" class="fixed inset-0 z-40 bg-surface hidden flex-col items-center justify-center px-8 text-center">
+    <span class="material-symbols-outlined text-secondary text-[56px] mb-3">assignment_turned_in</span>
+    <h2 class="text-lg font-bold text-on-surface">Sin sector asignado</h2>
+    <p class="text-sm text-on-surface-variant mt-1 mb-6 max-w-xs">
+      Cuando central te asigne un sector aparecerá aquí. Si devolviste uno, vuelve a pedirlo a tu jefe de cuadrilla.
+    </p>
+    <button id="btnReloadSector"
+            class="min-h-[48px] px-6 rounded-xl bg-primary text-on-primary font-semibold active:bg-secondary">
+      Actualizar
+    </button>
+  </div>
+
+  <!-- ============================================================
+       APP
+       ============================================================ -->
+  <div id="appView" class="hidden flex-col min-h-screen">
+
+    <header class="fixed top-0 w-full z-40 bg-surface/95 backdrop-blur shadow-sm pt-safe">
+      <div class="h-16 px-4 flex items-center justify-between gap-3">
+        <div class="flex flex-col min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="inline-block w-2 h-2 rounded-full bg-on-tertiary-container animate-pulse"></span>
+            <span class="text-[10px] uppercase tracking-widest font-bold text-primary truncate" id="headerEstado">GPS ACTIVO</span>
+          </div>
+          <h1 class="text-base font-bold text-on-surface truncate">Hoja de Ruta</h1>
+          <p id="userEmail" class="text-xs text-on-surface-variant truncate"></p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="headerSync" class="min-w-[44px] h-11 px-2 bg-surface-container rounded-lg flex items-center justify-center gap-1" title="Pendientes de sincronizar">
+            <span class="material-symbols-outlined text-secondary text-[20px]" id="headerSyncIcon">cloud_done</span>
+            <span class="text-xs font-bold text-primary" id="headerSyncCount"></span>
+          </button>
+          <button id="btnLogout" class="w-11 h-11 rounded-full bg-primary flex items-center justify-center" title="Cerrar sesión">
+            <span class="material-symbols-outlined text-on-primary text-[20px]">person</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex flex-col w-full pt-16 pb-24">
+
+      <!-- Franja de estado: conectividad + cola -->
+      <section class="px-4 pt-3 pb-1">
+        <div class="bg-surface-container rounded-xl p-3 shadow-sm flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-primary text-[22px]" id="stripIcon">cloud_sync</span>
+            </div>
+            <div class="flex flex-col min-w-0">
+              <span class="text-xs font-semibold text-on-surface uppercase tracking-wide truncate" id="stripTitulo">Conectado</span>
+              <p class="text-sm text-on-surface-variant truncate" id="stripTexto">Sincronizado con central</p>
+            </div>
+          </div>
+          <span class="bg-surface-container-highest text-primary text-xs font-semibold px-3 py-1 rounded shrink-0" id="stripComuna">—</span>
+        </div>
+      </section>
+
+      <!-- Tarjeta del sector asignado -->
+      <section class="px-4 py-2">
+        <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex flex-col min-w-0">
+              <span class="text-[10px] uppercase tracking-widest font-bold text-secondary">Sector exclusivo de hoy</span>
+              <h2 class="text-base font-bold text-on-surface leading-tight truncate" id="sectorNombre">…</h2>
+            </div>
+            <button id="btnDevolver" class="min-h-[40px] px-3 rounded-lg bg-error-container text-on-error-container text-xs font-bold shrink-0 flex items-center gap-1" title="Devolver el sector a central">
+              <span class="material-symbols-outlined text-[16px]">assignment_return</span>
+              <span>Devolver</span>
+            </button>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between items-baseline">
+              <span class="text-sm text-on-surface-variant">Avance de cuadrilla</span>
+              <span class="text-sm font-bold text-primary" id="sectorProgreso">—</span>
+            </div>
+            <div class="w-full h-3 rounded-full bg-surface-container overflow-hidden flex">
+              <div class="h-full" id="barVisitado" style="width:0%;background:#003f19"></div>
+              <div class="h-full" id="barErroneo" style="width:0%;background:#ba1a1a"></div>
+              <div class="h-full" id="barNoPasar" style="width:0%;background:#4069f2"></div>
+            </div>
+            <div class="grid grid-cols-4 gap-1 pt-1 text-center text-xs">
+              <div class="flex flex-col items-center bg-surface-container-low rounded p-1">
+                <span class="font-bold text-base" id="cntVisitado">0</span><span class="text-on-surface-variant">Visitados</span>
+              </div>
+              <div class="flex flex-col items-center bg-surface-container-low rounded p-1">
+                <span class="font-bold text-base text-error" id="cntErroneo">0</span><span class="text-on-surface-variant">Erróneos</span>
+              </div>
+              <div class="flex flex-col items-center bg-surface-container-low rounded p-1">
+                <span class="font-bold text-base text-secondary" id="cntNoPasar">0</span><span class="text-on-surface-variant">No pasar</span>
+              </div>
+              <div class="flex flex-col items-center bg-surface-container-low rounded p-1">
+                <span class="font-bold text-base text-on-surface-variant" id="cntPendiente">0</span><span class="text-on-surface-variant">Pendientes</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Toggle lista / mapa -->
+          <div class="grid grid-cols-2 gap-1 bg-surface-container p-1 rounded-xl" role="tablist">
+            <button id="tabListBtn" class="min-h-[48px] rounded-lg bg-surface-container-lowest text-primary text-sm font-semibold shadow-sm flex items-center justify-center gap-2">
+              <span class="material-symbols-outlined text-[20px]">checklist</span>
+              <span>Lista (<span id="tabListCount">0</span>)</span>
+            </button>
+            <button id="tabMapBtn" class="min-h-[48px] rounded-lg text-on-surface-variant text-sm font-semibold flex items-center justify-center gap-2">
+              <span class="material-symbols-outlined text-[20px]">map</span>
+              <span>Mapa</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VISTA LISTA -->
+      <div id="listView" class="flex flex-col w-full">
+        <section class="px-4 py-2">
+          <div class="flex items-center gap-2 overflow-x-auto pb-1" id="filtros">
+            <button data-filtro="todos" class="filtro min-h-[48px] px-4 rounded-xl bg-primary text-on-primary text-sm font-semibold shrink-0 flex items-center gap-2">
+              <span>Todos</span><span class="badge" data-badge="todos">0</span>
+            </button>
+            <button data-filtro="visitado" class="filtro min-h-[48px] px-4 rounded-xl bg-surface-container-lowest text-on-surface-variant text-sm font-semibold shrink-0 flex items-center gap-2">
+              <span>Visitados</span><span class="badge" data-badge="visitado">0</span>
+            </button>
+            <button data-filtro="incidencia" class="filtro min-h-[48px] px-4 rounded-xl bg-surface-container-lowest text-on-surface-variant text-sm font-semibold shrink-0 flex items-center gap-2">
+              <span>Incidencias</span><span class="badge" data-badge="incidencia">0</span>
+            </button>
+            <button data-filtro="pendiente" class="filtro min-h-[48px] px-4 rounded-xl bg-surface-container-lowest text-on-surface-variant text-sm font-semibold shrink-0 flex items-center gap-2">
+              <span>Pendientes</span><span class="badge" data-badge="pendiente">0</span>
+            </button>
+          </div>
+        </section>
+        <section id="pdvList" class="px-4 flex flex-col gap-3 pt-1"></section>
+      </div>
+
+      <!-- VISTA MAPA -->
+      <div id="mapView" class="hidden flex-col w-full px-4 pt-2 gap-3">
+        <div class="relative w-full h-[55vh] rounded-xl overflow-hidden bg-surface-container shadow-sm">
+          <div id="mapMovil"></div>
+          <div class="absolute bottom-2 left-2 right-2 bg-surface-container-lowest/95 backdrop-blur rounded-lg p-2 flex justify-around text-xs font-semibold pointer-events-none" id="mapLegend"></div>
+        </div>
+        <button id="btnNavegar" class="min-h-[48px] rounded-xl bg-primary text-on-primary text-sm font-semibold flex items-center justify-center gap-2 active:bg-secondary">
+          <span class="material-symbols-outlined text-[20px]">turn_sharp_right</span>
+          <span>Cómo llegar al siguiente punto</span>
+        </button>
+        <p class="text-xs text-on-surface-variant text-center">Toca el mapa para agregar un punto nuevo en tu sector</p>
+      </div>
+
+      <!-- VISTA SYNC -->
+      <div id="syncView" class="hidden flex-col w-full px-4 pt-2 gap-3">
+        <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-secondary text-[28px]" id="syncIcon">sync</span>
+            <div class="flex flex-col min-w-0">
+              <span class="font-bold text-on-surface" id="syncTitulo">Sincronización</span>
+              <span class="text-sm text-on-surface-variant" id="syncResumen">Sin cambios pendientes</span>
+            </div>
+          </div>
+          <button id="btnSyncAhora" class="min-h-[52px] rounded-xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2 active:bg-secondary">
+            <span class="material-symbols-outlined text-[22px] spin-slow" id="syncBtnIcon">sync</span>
+            <span>Sincronizar ahora</span>
+          </button>
+          <p class="text-xs text-on-surface-variant">Los cambios se guardan en el teléfono y se envían solos cuando hay señal.</p>
+        </div>
+        <div id="syncLista" class="flex flex-col gap-2"></div>
+      </div>
+    </main>
+
+    <!-- Barra flotante de sync (visible con cola pendiente) -->
+    <div id="fabSync" class="hidden fixed bottom-24 left-0 w-full px-4 z-30">
+      <button id="btnFabSync" class="w-full min-h-[48px] bg-primary text-on-primary rounded-xl shadow-lg flex items-center justify-between px-4 active:bg-secondary">
+        <span class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[22px] spin-slow">sync</span>
+          <span class="text-sm font-bold">Sincronizar ahora</span>
+        </span>
+        <span class="bg-secondary px-2 py-0.5 rounded text-xs font-bold" id="fabCount">0</span>
+      </button>
+    </div>
+
+    <!-- Bottom nav (3 tabs) -->
+    <nav class="fixed bottom-0 w-full z-40 pb-safe bg-surface/95 backdrop-blur shadow-[0_-1px_8px_rgba(0,0,0,0.04)]">
+      <div class="flex justify-around items-center h-16 px-2">
+        <button data-tab="mapa" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
+          <span class="material-symbols-outlined text-[24px]">map</span>
+          <span class="text-xs">Mapa</span>
+        </button>
+        <button data-tab="ruta" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-secondary bg-surface-container font-semibold">
+          <span class="material-symbols-outlined text-[24px]">checklist</span>
+          <span class="text-xs">Ruta</span>
+        </button>
+        <button data-tab="sync" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
+          <span class="material-symbols-outlined text-[24px]">sync</span>
+          <span class="text-xs">Sync</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SHEET: cambiar estado
+       ============================================================ -->
+  <div id="statusSheet" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm items-end justify-center">
+    <div class="sheet w-full bg-surface-container-lowest rounded-t-2xl p-4 pb-8 flex flex-col gap-3 shadow-2xl">
+      <div class="w-12 h-1 bg-surface-variant rounded-full mx-auto"></div>
+      <div class="flex justify-between items-center">
+        <div class="flex flex-col min-w-0">
+          <span class="text-[10px] uppercase tracking-widest text-on-surface-variant">Gestión de punto</span>
+          <h4 class="text-base font-bold text-on-surface truncate" id="statusSheetTitle">—</h4>
+        </div>
+        <button data-close="statusSheet" class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <p class="text-sm text-on-surface-variant">Selecciona el resultado en terreno:</p>
+      <div class="flex flex-col gap-2" id="statusBtns"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SHEET: ficha de punto (ver / editar / nuevo)
+       ============================================================ -->
+  <div id="pointSheet" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm items-end justify-center">
+    <div class="sheet w-full bg-surface-container-lowest rounded-t-2xl p-4 pb-8 flex flex-col gap-3 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div class="w-12 h-1 bg-surface-variant rounded-full mx-auto"></div>
+      <div class="flex justify-between items-center">
+        <div class="flex flex-col min-w-0">
+          <span class="text-[10px] uppercase tracking-widest text-on-surface-variant" id="pointSheetKicker">Punto</span>
+          <h4 class="text-base font-bold text-on-surface truncate" id="pointSheetTitle">—</h4>
+        </div>
+        <button data-close="pointSheet" class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div id="pointSheetBadges" class="flex flex-wrap gap-2"></div>
+      <p id="pointSheetError" class="text-sm text-error min-h-[18px]"></p>
+
+      <label class="flex flex-col gap-1">
+        <span class="text-xs font-semibold text-on-surface-variant">Nombre *</span>
+        <input id="fPDVNombre" class="min-h-[48px] px-4 rounded-xl bg-surface border border-outline-variant focus:border-secondary outline-none" />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs font-semibold text-on-surface-variant">Dirección</span>
+        <input id="fPDVDireccion" class="min-h-[48px] px-4 rounded-xl bg-surface border border-outline-variant focus:border-secondary outline-none" />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-xs font-semibold text-on-surface-variant">Notas</span>
+        <textarea id="fPDVNotas" rows="2" class="min-h-[72px] px-4 py-2 rounded-xl bg-surface border border-outline-variant focus:border-secondary outline-none resize-none"></textarea>
+      </label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="flex flex-col gap-1">
+          <span class="text-xs font-semibold text-on-surface-variant">Latitud</span>
+          <input id="fPDVLat" inputmode="decimal" class="min-h-[48px] px-3 rounded-xl bg-surface border border-outline-variant focus:border-secondary outline-none text-sm" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs font-semibold text-on-surface-variant">Longitud</span>
+          <input id="fPDVLng" inputmode="decimal" class="min-h-[48px] px-3 rounded-xl bg-surface border border-outline-variant focus:border-secondary outline-none text-sm" />
+        </label>
+      </div>
+      <button id="btnPointLocate" class="min-h-[44px] rounded-xl bg-surface-container text-secondary text-sm font-semibold flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[18px]">my_location</span>
+        <span>Usar mi ubicación actual</span>
+      </button>
+
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <a id="btnPointNav" target="_blank" rel="noopener"
+           class="min-h-[48px] rounded-xl bg-surface-container text-primary text-sm font-semibold flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[20px]">near_me</span>
+          <span>Cómo llegar</span>
+        </a>
+        <button id="btnPointStatus" class="min-h-[48px] rounded-xl bg-surface-container text-primary text-sm font-semibold flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-[20px]">edit</span>
+          <span>Cambiar estado</span>
+        </button>
+      </div>
+
+      <button id="btnPointSave" class="min-h-[52px] rounded-xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2 active:bg-secondary">
+        <span class="material-symbols-outlined text-[22px]">save</span>
+        <span id="btnPointSaveLabel">Guardar cambios</span>
+      </button>
+      <button id="btnPointDelete" class="hidden min-h-[48px] rounded-xl bg-error-container text-on-error-container font-semibold flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[20px]">delete</span>
+        <span>Borrar punto</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SHEET: confirmación (devolver sector / borrar punto)
+       ============================================================ -->
+  <div id="confirmSheet" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm items-end justify-center">
+    <div class="sheet w-full bg-surface-container-lowest rounded-t-2xl p-4 pb-8 flex flex-col gap-4 shadow-2xl">
+      <div class="w-12 h-1 bg-surface-variant rounded-full mx-auto"></div>
+      <h4 class="text-base font-bold text-on-surface text-center" id="confirmTitulo">¿Confirmar?</h4>
+      <p class="text-sm text-on-surface-variant text-center" id="confirmMsg"></p>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btnConfirmNo" class="min-h-[52px] rounded-xl bg-surface-container text-on-surface font-semibold">Cancelar</button>
+        <button id="btnConfirmYes" class="min-h-[52px] rounded-xl bg-error text-white font-bold">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastMovil" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-sm bg-primary text-on-primary rounded-xl p-3 shadow-xl flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="material-symbols-outlined text-[20px]" id="toastIcon">task_alt</span>
+      <span class="text-sm truncate" id="toastMsg"></span>
+    </div>
+    <button id="toastUndo" class="hidden min-h-[40px] px-3 rounded bg-white/15 text-xs font-bold uppercase shrink-0">Deshacer</button>
+  </div>
+
+  <script src="lib.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
