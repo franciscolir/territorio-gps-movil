@@ -123,9 +123,10 @@
   <div id="emptyView" class="fixed inset-0 z-40 bg-surface hidden flex-col items-center justify-center px-8 text-center">
     <span class="material-symbols-outlined text-secondary text-[56px] mb-3">assignment_turned_in</span>
     <h2 class="text-lg font-bold text-on-surface">Sin sector asignado</h2>
-    <p class="text-sm text-on-surface-variant mt-1 mb-6 max-w-xs">
+    <p class="text-sm text-on-surface-variant mt-1 mb-2 max-w-xs">
       Cuando central te asigne un sector aparecerá aquí. Si devolviste uno, vuelve a pedirlo a tu jefe de cuadrilla.
     </p>
+    <p id="emptyError" class="hidden text-xs text-error max-w-xs mb-4"></p>
     <button id="btnReloadSector"
             class="min-h-[48px] px-6 rounded-xl bg-primary text-on-primary font-semibold active:bg-secondary">
       Actualizar

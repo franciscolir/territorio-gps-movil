@@ -34,6 +34,7 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 let user = null;
 let sector = null;      // asignación activa con el sector anidado
+let errorSector = null; // último error al cargar la asignación (diagnóstico)
 let puntos = [];        // puntos del servidor (RLS ya limita al sector)
 let cola = [];          // operaciones offline pendientes
 let tabActual = 'ruta';
@@ -345,10 +346,12 @@ async function cargarAsignacion() {
     .maybeSingle();
   if (error) {
     // red caída: conserva el sector en memoria; otro error (columna faltante,
-    // RLS) se avisa para no confundirlo con "sin sector asignado"
+    // grants/RLS) se avisa para no confundirlo con "sin sector asignado"
+    errorSector = error.message;
     if (!esErrorDeRed(error)) toast('No se pudo cargar tu sector: ' + error.message, { error: true });
     return;
   }
+  errorSector = null;
   sector = data && data.sectores ? data : null;
 }
 
@@ -401,6 +404,9 @@ function pintarVistaSector() {
   $('emptyView').classList.toggle('hidden', !vacio);
   $('emptyView').classList.toggle('flex', vacio);
   $('appView').classList.toggle('hidden', vacio);
+  const err = $('emptyError');
+  err.textContent = errorSector ? 'Detalle: ' + errorSector : '';
+  err.classList.toggle('hidden', !errorSector);
 }
 
 function pintarCola() {
