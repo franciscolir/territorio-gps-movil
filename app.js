@@ -49,6 +49,10 @@ let confirmAction = null;
 let syncRunning = false;
 let opSeq = 0;
 
+// Modo abierto por card en la lista: id -> 'nota' | 'estados' (y borrador de nota)
+const modoCard = {};
+const borradorNota = {};
+
 // Configuración local (persistida en localStorage)
 let appMapa = 'google';   // 'google' | 'waze' | 'apple'
 let tema = 'claro';       // 'claro' | 'oscuro'
@@ -399,6 +403,107 @@ function pintarTodo() {
   if (mapListo) actualizarCapaPuntos();
 }
 
+// ============================================================
+// ZONA DE BOTONES DE LA CARD: modos nota / estados con transición
+// Los elementos colapsan (flex-basis → 0) y se expanden: se ven
+// deslizarse y volver, nunca aparecer de golpe.
+// ============================================================
+function abrirModoNota(zona, id) {
+  modoCard[id] = 'nota';
+  if (!(id in borradorNota)) borradorNota[id] = puntoPorId(id)?.notas || '';
+  zona.querySelector('.acc-nav')?.classList.add('oculto');
+  zona.querySelector('.acc-estado')?.classList.add('oculto');
+  zona.querySelector('.acc-input')?.classList.add('abierta');
+  zona.querySelector('.acc-nota')?.classList.add('modo-guardar');
+  const inp = zona.querySelector('[data-nota-input]');
+  inp.value = borradorNota[id] ?? '';
+  setTimeout(() => inp.focus(), 340);
+}
+
+function abrirModoEstados(zona, id) {
+  modoCard[id] = 'estados';
+  zona.querySelector('.acc-nav')?.classList.add('oculto');
+  zona.querySelector('.acc-input')?.classList.remove('abierta');
+  zona.querySelector('.acc-nota')?.classList.remove('modo-guardar');
+  zona.querySelector('.acc-nota')?.classList.add('oculto');
+  zona.querySelector('.acc-estado')?.classList.add('oculto');
+  zona.querySelector('.estados-wrap')?.classList.add('abierta');
+}
+
+// Todo vuelve a su sitio deslizándose
+function cerrarZona(zona, id) {
+  delete modoCard[id];
+  zona.querySelector('.acc-nav')?.classList.remove('oculto');
+  zona.querySelector('.acc-input')?.classList.remove('abierta');
+  zona.querySelector('.acc-nota')?.classList.remove('modo-guardar', 'oculto');
+  zona.querySelector('.acc-estado')?.classList.remove('oculto');
+  zona.querySelector('.estados-wrap')?.classList.remove('abierta');
+}
+
+async function guardarNotaRapida(zona, id) {
+  const p = puntoPorId(id);
+  if (!p) return;
+  const nota = (borradorNota[id] ?? '').trim();
+  const c = coordsDe(p) || {};
+  const { error } = await db.rpc('actualizar_punto_terreno', {
+    p_id: id, p_nombre: p.nombre, p_direccion: p.direccion || '',
+    p_notas: nota, p_lat: c.lat ?? p.lat, p_lng: c.lng ?? p.lng,
+  });
+  if (error) {
+    if (esErrorDeRed(error)) {
+      encolar('editar', id, { nombre: p.nombre, direccion: p.direccion || '', notas: nota, lat: c.lat, lng: c.lng });
+      p.notas = nota;
+      actualizarNotasEnCard(zona, nota);
+      toast('Sin señal: la nota quedó en cola local');
+      cerrarZona(zona, id);
+      return;
+    }
+    toast(error.message, { error: true });
+    return;
+  }
+  p.notas = nota;
+  actualizarNotasEnCard(zona, nota);
+  delete borradorNota[id];
+  toast('Nota guardada');
+  cerrarZona(zona, id);
+}
+
+function actualizarNotasEnCard(zona, nota) {
+  const art = zona.closest('article');
+  if (!art) return;
+  const bloque = art.querySelector('[data-notas]');
+  if (nota) {
+    const html = `<div data-notas class="bg-surface-container-low p-2 rounded-lg flex items-center gap-2">
+      <span class="material-symbols-outlined text-secondary text-[18px] shrink-0">info</span>
+      <p class="text-xs text-on-surface-variant italic truncate">"${escapeHtml(nota)}"</p>
+    </div>`;
+    if (bloque) bloque.outerHTML = html;
+    else art.querySelector('[data-coords]')?.insertAdjacentHTML('afterend', html);
+  } else {
+    bloque?.remove();
+  }
+}
+
+function elegirEstadoRapido(zona, id, valor) {
+  if (!puntoPorId(id)) return;
+  // mantenerLista: evita el re-render que cortaría la animación de cierre
+  aplicarEstado(id, valor, { mantenerLista: true });
+  actualizarEstadoEnCard(zona, valor);
+  cerrarZona(zona, id);
+}
+
+function actualizarEstadoEnCard(zona, est) {
+  const art = zona.closest('article');
+  const chip = art?.querySelector('[data-chip]');
+  if (chip) chip.innerHTML = chipEstado(est);
+  zona.querySelectorAll('.est-op').forEach((b) => {
+    const activo = b.dataset.valor === est;
+    b.className = `est-op min-w-0 flex-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 active:opacity-80 ${
+      activo ? CLASES_ESTADO_ACTIVO[b.dataset.valor] : 'bg-surface-container text-on-surface-variant'
+    }`;
+  });
+}
+
 function pintarVistaSector() {
   const vacio = !sector;
   $('emptyView').classList.toggle('hidden', !vacio);
@@ -510,11 +615,19 @@ function pintarLista() {
     const coords = coordsDe(p);
     const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
     const local = !!p.local;
-    const estadosRapidos = ESTADOS.map(([valor, etiqueta]) => {
+    const enNota = modoCard[p.id] === 'nota';
+    const enEstados = modoCard[p.id] === 'estados';
+    const clsNav = enNota || enEstados ? 'oculto' : '';
+    const clsInput = enNota ? 'abierta' : '';
+    const clsNota = enNota ? 'modo-guardar' : (enEstados ? 'oculto' : '');
+    const clsEstado = enNota || enEstados ? 'oculto' : '';
+    const clsEstados = enEstados ? 'abierta' : '';
+    const borrador = enNota ? (borradorNota[p.id] ?? p.notas ?? '') : (p.notas ?? '');
+    const opcionesEstado = ESTADOS.map(([valor, etiqueta]) => {
       const activo = valor === est;
       const cls = activo ? CLASES_ESTADO_ACTIVO[valor] : 'bg-surface-container text-on-surface-variant';
       return `
-        <button class="min-h-[44px] rounded-lg ${cls} text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 active:opacity-80"
+        <button class="est-op min-w-0 flex-1 rounded-lg ${cls} text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 active:opacity-80"
                 data-estado-rapido="${escapeHtml(p.id)}" data-valor="${valor}"
                 ${local ? 'disabled' : ''}>
           <span class="material-symbols-outlined text-[18px]">${ICONOS_ESTADO[valor]}</span>
@@ -529,38 +642,68 @@ function pintarLista() {
           <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
           <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || 'Sin dirección')}</p>
         </div>
-        ${chipEstado(est)}
+        <span data-chip>${chipEstado(est)}</span>
       </div>
       ${coords ? `
-      <div class="flex items-center gap-1 text-xs text-on-surface-variant">
+      <div data-coords class="flex items-center gap-1 text-xs text-on-surface-variant">
         <span class="material-symbols-outlined text-[14px]">location_on</span>
         <span>${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}</span>
       </div>` : ''}
       ${p.notas ? `
-      <div class="bg-surface-container-low p-2 rounded-lg flex items-center gap-2">
+      <div data-notas class="bg-surface-container-low p-2 rounded-lg flex items-center gap-2">
         <span class="material-symbols-outlined text-secondary text-[18px] shrink-0">info</span>
         <p class="text-xs text-on-surface-variant italic truncate">"${escapeHtml(p.notas)}"</p>
       </div>` : ''}
-      <div class="grid grid-cols-2 gap-2">
-        <a class="min-h-[44px] rounded-lg bg-surface-container flex items-center justify-center active:bg-surface-container-high"
+      <div class="zona-btns">
+        <a class="acc acc-nav ${clsNav} bg-surface-container active:bg-surface-container-high"
            href="${nav}" target="_blank" rel="noopener" title="Cómo llegar" aria-label="Cómo llegar">
           <span class="material-symbols-outlined text-primary text-[20px]">near_me</span>
         </a>
-        <button class="min-h-[44px] rounded-lg bg-surface-container flex items-center justify-center active:bg-surface-container-high"
-                data-abrir="${escapeHtml(p.id)}" title="Notas / Editar" aria-label="Notas y edición"
+        <div class="acc-zona acc-input ${clsInput}">
+          <input data-nota-input="${escapeHtml(p.id)}"
+                 class="w-full h-full min-w-0 px-3 rounded-lg bg-surface-container text-on-surface text-sm outline-none border border-outline-variant focus:border-secondary"
+                 placeholder="Agregar nota…" value="${escapeHtml(borrador)}" />
+        </div>
+        <button class="acc acc-nota ${clsNota} bg-surface-container active:bg-surface-container-high"
+                data-nota-btn="${escapeHtml(p.id)}" title="Nota" aria-label="Nota"
                 ${local ? 'disabled' : ''}>
-          <span class="material-symbols-outlined text-primary text-[20px]">edit</span>
+          <span class="ic ic-pencil material-symbols-outlined text-primary text-[20px]">edit</span>
+          <span class="ic ic-flecha material-symbols-outlined text-primary text-[20px]">arrow_forward</span>
         </button>
+        <button class="acc acc-estado ${clsEstado} bg-surface-container active:bg-surface-container-high"
+                data-estado-btn="${escapeHtml(p.id)}" title="Estado" aria-label="Cambiar estado"
+                ${local ? 'disabled' : ''}>
+          <span class="material-symbols-outlined text-primary text-[20px]">flag</span>
+        </button>
+        <div class="acc-zona estados-wrap ${clsEstados}">${opcionesEstado}</div>
       </div>
-      <div class="grid grid-cols-4 gap-1">${estadosRapidos}</div>
     </article>`;
   }).join('');
 
   box.querySelectorAll('[data-abrir]').forEach((el) => {
     el.addEventListener('click', () => abrirFicha(el.dataset.abrir));
   });
+  box.querySelectorAll('[data-nota-btn]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const zona = b.closest('.zona-btns');
+      const id = b.dataset.notaBtn;
+      if (modoCard[id] === 'nota') guardarNotaRapida(zona, id);
+      else abrirModoNota(zona, id);
+    });
+  });
+  box.querySelectorAll('[data-nota-input]').forEach((inp) => {
+    inp.addEventListener('input', () => { borradorNota[inp.dataset.notaInput] = inp.value; });
+    inp.addEventListener('keydown', (e) => {
+      const zona = inp.closest('.zona-btns');
+      if (e.key === 'Enter') { e.preventDefault(); guardarNotaRapida(zona, inp.dataset.notaInput); }
+      if (e.key === 'Escape') { delete borradorNota[inp.dataset.notaInput]; cerrarZona(zona, inp.dataset.notaInput); }
+    });
+  });
+  box.querySelectorAll('[data-estado-btn]').forEach((b) => {
+    b.addEventListener('click', () => abrirModoEstados(b.closest('.zona-btns'), b.dataset.estadoBtn));
+  });
   box.querySelectorAll('[data-estado-rapido]').forEach((b) => {
-    b.addEventListener('click', () => aplicarEstado(b.dataset.estadoRapido, b.dataset.valor));
+    b.addEventListener('click', () => elegirEstadoRapido(b.closest('.zona-btns'), b.dataset.estadoRapido, b.dataset.valor));
   });
 }
 
@@ -866,14 +1009,15 @@ function abrirStatusSheet(id, nombre) {
   sheetOpen('statusSheet');
 }
 
-async function aplicarEstado(id, estado, { silent = false } = {}) {
+async function aplicarEstado(id, estado, { silent = false, mantenerLista = false } = {}) {
   const p = puntoPorId(id);
   if (!p) return;
   const prev = p.estado || 'pendiente';
 
   // Optimista: la lista refleja el cambio al instante
   p.estado = estado;
-  pintarLista(); pintarTarjetaSector(); pintarFiltros(); actualizarCapaPuntos();
+  if (!mantenerLista) pintarLista();
+  pintarTarjetaSector(); pintarFiltros(); actualizarCapaPuntos();
 
   const { error } = await db.rpc('marcar_estado', { p_id: id, p_estado: estado });
   if (error) {
@@ -883,7 +1027,8 @@ async function aplicarEstado(id, estado, { silent = false } = {}) {
       return;
     }
     p.estado = prev; // revierte el optimismo
-    pintarLista(); pintarTarjetaSector(); pintarFiltros(); actualizarCapaPuntos();
+    if (!mantenerLista) pintarLista();
+    pintarTarjetaSector(); pintarFiltros(); actualizarCapaPuntos();
     toast(error.message, { error: true });
     return;
   }

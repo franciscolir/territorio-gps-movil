@@ -46,6 +46,34 @@
     .spin-slow { animation: spin 2.4s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .sheet { transition: transform .18s ease; }
+    /* ---- Zona de botones de la card: los elementos se deslizan ---- */
+    .zona-btns { display: flex; align-items: stretch; height: 48px; }
+    .acc {
+      position: relative; flex: 1 1 0%; min-width: 0; margin-right: 8px;
+      border-radius: 0.5rem; display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      transition: flex-grow .32s cubic-bezier(.34,1.1,.5,1), flex-basis .32s cubic-bezier(.34,1.1,.5,1),
+                  opacity .2s ease, margin .32s cubic-bezier(.34,1.1,.5,1), padding .32s ease;
+    }
+    .zona-btns > :last-child { margin-right: 0; }
+    .acc.oculto {
+      flex: 0 0 0px; opacity: 0; margin-right: 0;
+      padding-left: 0; padding-right: 0; pointer-events: none;
+    }
+    .acc-zona {
+      flex: 0 0 0px; min-width: 0; display: flex; align-items: stretch; gap: 4px;
+      opacity: 0; overflow: hidden; pointer-events: none;
+      transition: flex-grow .32s cubic-bezier(.34,1.1,.5,1), flex-basis .32s cubic-bezier(.34,1.1,.5,1),
+                  opacity .2s ease, margin .32s cubic-bezier(.34,1.1,.5,1);
+    }
+    .acc-zona.abierta { flex: 1 1 0%; opacity: 1; pointer-events: auto; }
+    .acc-input { margin-right: 0; }
+    .acc-input.abierta { margin-right: 8px; }
+    /* Lápiz → flecha: cruce con desplazamiento */
+    .acc-nota .ic { transition: opacity .18s ease, transform .3s cubic-bezier(.34,1.1,.5,1); }
+    .acc-nota .ic-flecha { opacity: 0; transform: translateX(-12px) scale(.5); }
+    .acc-nota.modo-guardar .ic-pencil { opacity: 0; transform: translateX(12px) scale(.5); }
+    .acc-nota.modo-guardar .ic-flecha { opacity: 1; transform: none; }
     /* Punto azul de mi ubicación en el mapa */
     .user-dot {
       width: 18px; height: 18px; border-radius: 50%;
