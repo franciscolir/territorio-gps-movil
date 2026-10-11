@@ -567,18 +567,18 @@ function pintarLista() {
 // Iconos y clases de los botones de estado rápido de la card
 const ICONOS_ESTADO = { pendiente: 'schedule', visitado: 'check_circle', erroneo: 'cancel', no_pasar: 'block' };
 const CLASES_ESTADO_ACTIVO = {
-  pendiente: 'bg-surface-container-highest text-on-surface',
+  pendiente: 'bg-surface-container-high text-secondary',
   visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
-  erroneo: 'bg-error-container text-on-error-container',
-  no_pasar: 'bg-surface-container-high text-secondary',
+  erroneo: 'bg-surface-container-highest text-on-surface-variant',
+  no_pasar: 'bg-error-container text-on-error-container',
 };
 
 function chipEstado(est) {
   const mapa = {
     visitado: ['bg-tertiary-fixed text-on-tertiary-fixed', 'check_circle', 'Visitado'],
-    erroneo: ['bg-error-container text-on-error-container', 'cancel', 'Erróneo'],
-    no_pasar: ['bg-surface-container-high text-secondary', 'block', 'No pasar'],
-    pendiente: ['bg-surface-container text-on-surface-variant', 'schedule', 'Pendiente'],
+    erroneo: ['bg-surface-container-highest text-on-surface-variant', 'cancel', 'Erróneo'],
+    no_pasar: ['bg-error-container text-on-error-container', 'block', 'No pasar'],
+    pendiente: ['bg-surface-container-high text-secondary', 'schedule', 'Pendiente'],
   };
   const [cls, ic, txt] = mapa[est] || mapa.pendiente;
   return `<span class="inline-flex items-center gap-1 px-3 py-1 rounded ${cls} text-xs font-semibold shrink-0">
@@ -692,9 +692,9 @@ function actualizarCapaPuntos() {
   const av = sectorAvance(puntos);
   $('mapLegend').innerHTML = `
     <span class="text-on-tertiary">${av.visitado} visitados</span>
-    <span class="text-error">${av.erroneo} erróneos</span>
-    <span class="text-secondary">${av.no_pasar} no pasar</span>
-    <span class="text-on-surface-variant">${av.pendiente} pendientes</span>`;
+    <span class="text-on-surface-variant">${av.erroneo} erróneos</span>
+    <span class="text-error">${av.no_pasar} no pasar</span>
+    <span class="text-secondary">${av.pendiente} pendientes</span>`;
 }
 
 // ============================================================
@@ -845,10 +845,10 @@ function abrirStatusSheet(id, nombre) {
   box.innerHTML = '';
   const iconos = { pendiente: 'schedule', visitado: 'check_circle', erroneo: 'cancel', no_pasar: 'block' };
   const clases = {
-    pendiente: 'bg-surface-container text-on-surface',
+    pendiente: 'bg-surface-container-high text-secondary',
     visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
-    erroneo: 'bg-error-container text-on-error-container',
-    no_pasar: 'bg-surface-container-high text-secondary',
+    erroneo: 'bg-surface-container-highest text-on-surface-variant',
+    no_pasar: 'bg-error-container text-on-error-container',
   };
   for (const [valor, etiqueta] of ESTADOS) {
     const b = document.createElement('button');

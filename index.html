@@ -38,10 +38,10 @@
     }
     .pin-wrap:active .pin { scale: 1.08; }
     .pin .pin-ic { font-size: 15px; line-height: 1; }
-    .pin[data-est="pendiente"] { background: #0f385a; color: #fff; }
+    .pin[data-est="pendiente"] { background: #4069f2; color: #fff; }
     .pin[data-est="visitado"] { background: #95f8a7; color: #00210a; }
-    .pin[data-est="erroneo"] { background: #ba1a1a; color: #fff; }
-    .pin[data-est="no_pasar"] { background: #4069f2; color: #fff; }
+    .pin[data-est="erroneo"] { background: #73777f; color: #fff; }
+    .pin[data-est="no_pasar"] { background: #ba1a1a; color: #fff; }
     .pin.is-nuevo { outline: 3px solid #ba1a1a; outline-offset: 2px; }
     .spin-slow { animation: spin 2.4s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -202,8 +202,8 @@
             </div>
             <div class="w-full h-3 rounded-full bg-surface-container overflow-hidden flex">
               <div class="h-full" id="barVisitado" style="width:0%;background:#003f19"></div>
-              <div class="h-full" id="barErroneo" style="width:0%;background:#ba1a1a"></div>
-              <div class="h-full" id="barNoPasar" style="width:0%;background:#4069f2"></div>
+              <div class="h-full" id="barErroneo" style="width:0%;background:#73777f"></div>
+              <div class="h-full" id="barNoPasar" style="width:0%;background:#ba1a1a"></div>
             </div>
             <div class="grid grid-cols-4 gap-1 pt-1 text-center text-xs">
               <div class="flex flex-col items-center bg-surface-container-low rounded p-1">
