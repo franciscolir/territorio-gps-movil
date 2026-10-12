@@ -51,7 +51,7 @@ describe('escapeHtml', () => {
     expect(lib.escapeHtml(undefined)).toBe('');
   });
   it('no rompe texto normal con acentos', () => {
-    expect(lib.escapeHtml('Sector Ñuñoa · visitado')).toBe('Sector Ñuñoa · visitado');
+    expect(lib.escapeHtml('Territorio Ñuñoa · visitado')).toBe('Territorio Ñuñoa · visitado');
   });
 });
 

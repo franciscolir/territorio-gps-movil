@@ -1,8 +1,8 @@
 // ============================================================
 // APP DE TERRENO — colaboradores (repo móvil autónomo).
-// · ve SOLO su sector asignado y sus puntos (RLS de la migración 003)
-// · crea/edita puntos del sector, cambia estados, borra solo los suyos
-// · devuelve el sector aunque no cubra el 100%
+// · ve SOLO su territorio asignado y sus puntos (RLS de la migración 003)
+// · crea/edita puntos del territorio, cambia estados, borra solo los suyos
+// · devuelve el territorio aunque no cubra el 100%
 // · cola offline en localStorage con sincronización manual/automática
 // ============================================================
 
@@ -33,9 +33,9 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 let user = null;
-let sector = null;      // asignación activa con el sector anidado
+let sector = null;      // asignación activa con el territorio anidado
 let errorSector = null; // último error al cargar la asignación (diagnóstico)
-let puntos = [];        // puntos del servidor (RLS ya limita al sector)
+let puntos = [];        // puntos del servidor (RLS ya limita al territorio)
 let cola = [];          // operaciones offline pendientes
 let tabActual = 'ruta';
 let filtroActual = 'todos';
@@ -328,10 +328,10 @@ $('btnReloadSector').addEventListener('click', async () => {
 });
 
 // ============================================================
-// DATOS (RLS: el servidor ya limita a sector activo / puntos propios)
+// DATOS (RLS: el servidor ya limita a territorio activo / puntos propios)
 // ============================================================
 async function refrescar({ ajustarMapa = false } = {}) {
-  // Sin señal se conserva lo que hay en memoria (no se "borra" el sector)
+  // Sin señal se conserva lo que hay en memoria (no se "borra" el territorio)
   if (!navigator.onLine) {
     if (mapListo && ajustarMapa) ajustarVistaMapa();
     return;
@@ -373,10 +373,10 @@ async function cargarAsignacion({ reintentado = false } = {}) {
       try { await db.auth.refreshSession(); } catch (_) {}
       return cargarAsignacion({ reintentado: true });
     }
-    // red caída: conserva el sector en memoria; otro error (columna faltante,
-    // grants/RLS) se avisa para no confundirlo con "sin sector asignado"
+    // red caída: conserva el territorio en memoria; otro error (columna faltante,
+    // grants/RLS) se avisa para no confundirlo con "sin territorio asignado"
     errorSector = error.message;
-    if (!esErrorDeRed(error)) toast('No se pudo cargar tu sector: ' + error.message, { error: true });
+    if (!esErrorDeRed(error)) toast('No se pudo cargar tu territorio: ' + error.message, { error: true });
     return;
   }
   errorSector = null;
@@ -951,7 +951,7 @@ async function guardarFicha() {
 
   if (!nombre) { err.textContent = 'El nombre es obligatorio'; return; }
   if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
-  if (!dentroDelSector(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu sector'; return; }
+  if (!dentroDelSector(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu territorio'; return; }
 
   if (sheetPunto.esNuevo) {
     // Intenta contra el servidor; sin señal, encola la creación
@@ -1088,12 +1088,12 @@ $('btnPointDelete').addEventListener('click', () => {
 });
 
 // ============================================================
-// DEVOLVER SECTOR
+// DEVOLVER TERRITORIO
 // ============================================================
 $('btnDevolver').addEventListener('click', () => {
   if (!sector) return;
   preguntar(
-    '¿Devolver el sector?',
+    '¿Devolver el territorio?',
     `Vas a devolver "${sector.sectores.nombre}" a central aunque no esté terminado. Dejarás de verlo al instante.`,
     async () => {
       const { error } = await db.rpc('devolver_sector');
@@ -1105,7 +1105,7 @@ $('btnDevolver').addEventListener('click', () => {
       puntos = [];
       if (map) { map.remove(); map = null; mapListo = false; markers = {}; }
       pintarTodo();
-      toast('Sector devuelto a central');
+      toast('Territorio devuelto a central');
     }
   );
 });

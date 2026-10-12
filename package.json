@@ -1,7 +1,7 @@
 ﻿{
   "name": "territorio-gps-movil",
   "version": "1.0.0",
-  "description": "App de terreno (colaboradores) de Territorio GPS - sector unico, estados de puntos y cola offline - MapLibre + Supabase",
+  "description": "App de terreno (colaboradores) de Territorio GPS - territorio unico, estados de puntos y cola offline - MapLibre + Supabase",
   "type": "module",
   "scripts": {
     "test": "vitest run",

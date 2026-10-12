@@ -3,10 +3,10 @@
 Web-app para **colaboradores de terreno** del proyecto Territorio GPS
 (Región Metropolitana de Chile). Es la app que usa la cuadrilla en el teléfono:
 
-- Ve **solo su sector asignado** y sus puntos (lo limita RLS en Supabase, no el front).
-- Crea y edita puntos, cambia estados (`pendiente`, `visitado`, `erróneo`, `no_pasar`) y **devuelve el sector** cuando termina.
+- Ve **solo su territorio asignado** y sus puntos (lo limita RLS en Supabase, no el front).
+- Crea y edita puntos, cambia estados (`pendiente`, `visitado`, `erróneo`, `no_pasar`) y **devuelve el territorio** cuando termina.
 - **Cola offline**: sin señal, todo queda guardado en el teléfono (localStorage) y se sincroniza solo al volver la conexión.
-- Mapa MapLibre con el polígono del sector, pines por estado y navegación a Google Maps.
+- Mapa MapLibre con el polígono del territorio, pines por estado y navegación a Google Maps.
 - **GPS del dispositivo**: al iniciar pide activar la ubicación; si se concede muestra "GPS ACTIVO" en el header y un punto azul con tu posición en el mapa; si no, "UBICACIÓN NO DISPONIBLE".
 - **Configuración** (engranaje en el header): tema **claro/oscuro** y **app de direcciones** (Google Maps, Waze o Mapas de iOS) que se abre al tocar "Cómo llegar".
 
@@ -57,7 +57,7 @@ Web-app para **colaboradores de terreno** del proyecto Territorio GPS
    ```
 
 3. En el teléfono, abre la URL, inicia sesión con tu cuenta de colaborador
-   (creada en Supabase → Authentication) y espera a que central te asigne un sector.
+   (creada en Supabase → Authentication) y espera a que central te asigne un territorio.
 
 > No hay build ni bundler: `index.html` + `lib.js` + `app.js` son scripts
 > clásicos que se sirven tal cual (funciona también abriendo `index.html`
@@ -74,8 +74,8 @@ Web-app para **colaboradores de terreno** del proyecto Territorio GPS
 ## Estructura del repo
 
 ```
-index.html            Shell de la app: login, tarjeta de sector, lista/mapa/sync, bottom sheets
-app.js                Lógica de terreno: sector único, fichas, estados, devolución, cola offline
+index.html            Shell de la app: login, tarjeta de territorio, lista/mapa/sync, bottom sheets
+app.js                Lógica de terreno: territorio único, fichas, estados, devolución, cola offline
 lib.js                Funciones puras: escaping, EWKB/GeoJSON, punto-en-polígono, estados, cola offline
 tests/lib.test.js     Tests unitarios de lib.js (Vitest)
 eslint.config.js      Configuración de lint (browser + node)
@@ -90,18 +90,18 @@ lint detecte usos/definiciones.
 ## Backend (RPCs que consume)
 
 El front **no** toca tablas directamente para escribir: usa las RPCs del repo
-principal (RLS garantiza que un colaborador solo afecte su sector):
+principal (RLS garantiza que un colaborador solo afecte su territorio):
 
 | RPC | Uso en la app |
 |---|---|
 | `marcar_estado` | Cambiar estado de un punto (devuelve el estado anterior para "Deshacer") |
-| `guardar_punto` | Crear punto (dentro del polígono del sector) |
+| `guardar_punto` | Crear punto (dentro del polígono del territorio) |
 | `actualizar_punto_terreno` | Editar nombre/dirección/notas/coordenadas |
 | `eliminar_punto_propio` | Borrar un punto creado por el propio colaborador |
-| `devolver_sector` | Devolver el sector a central (ciclo de vida activa/devuelta) |
+| `devolver_sector` | Devolver el territorio a central (ciclo de vida activa/devuelta) |
 
-Lecturas: `sectores_asignaciones` (asignación activa con el sector anidado) y
-`puntos` (RLS ya filtra al sector activo).
+Lecturas: `sectores_asignaciones` (asignación activa con el territorio anidado) y
+`puntos` (RLS ya filtra al territorio activo).
 
 ## Cola offline
 

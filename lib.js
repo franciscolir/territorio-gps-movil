@@ -17,7 +17,7 @@ function estadoLabel(e) {
   const x = ESTADOS.find((k) => k[0] === e);
   return x ? x[1] : 'Pendiente';
 }
-// ¿El punto (lng, lat) cae dentro del polígono/multipolígono del sector?
+// ¿El punto (lng, lat) cae dentro del polígono/multipolígono del territorio?
 function pointInGeometry(lng, lat, geom) {
   if (!geom || !geom.coordinates) return false;
   const polygons = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
@@ -111,7 +111,7 @@ function colaResumen(ops) {
   return r;
 }
 
-// Avance del sector a partir de sus puntos (pct = visitados sobre el total).
+// Avance del territorio a partir de sus puntos (pct = visitados sobre el total).
 function sectorAvance(puntos) {
   const r = { total: puntos.length, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0 };
   for (const p of puntos) {
