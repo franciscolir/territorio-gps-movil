@@ -98,9 +98,9 @@ principal (RLS garantiza que un colaborador solo afecte su territorio):
 | `guardar_punto` | Crear punto (dentro del polígono del territorio) |
 | `actualizar_punto_terreno` | Editar nombre/dirección/notas/coordenadas |
 | `eliminar_punto_propio` | Borrar un punto creado por el propio colaborador |
-| `devolver_sector` | Devolver el territorio a central (ciclo de vida activa/devuelta) |
+| `devolver_territorio` | Devolver el territorio a central (ciclo de vida activa/devuelta) |
 
-Lecturas: `sectores_asignaciones` (asignación activa con el territorio anidado) y
+Lecturas: `territorios_asignaciones` (asignación activa con el territorio anidado) y
 `puntos` (RLS ya filtra al territorio activo).
 
 ## Cola offline

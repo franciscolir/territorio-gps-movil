@@ -157,7 +157,7 @@
       Cuando central te asigne un territorio aparecerá aquí. Si devolviste uno, vuelve a pedirlo a tu jefe de cuadrilla.
     </p>
     <p id="emptyError" class="hidden text-xs text-error max-w-xs mb-4"></p>
-    <button id="btnReloadSector"
+    <button id="btnReloadTerritorio"
             class="min-h-[48px] px-6 rounded-xl bg-primary text-on-primary font-semibold active:bg-secondary">
       Actualizar
     </button>
@@ -217,7 +217,7 @@
           <div class="flex items-start justify-between gap-3">
             <div class="flex flex-col min-w-0">
               <span class="text-[10px] uppercase tracking-widest font-bold text-secondary">Territorio exclusivo de hoy</span>
-              <h2 class="text-base font-bold text-on-surface leading-tight truncate" id="sectorNombre">…</h2>
+              <h2 class="text-base font-bold text-on-surface leading-tight truncate" id="territorioNombre">…</h2>
             </div>
             <button id="btnDevolver" class="min-h-[40px] px-3 rounded-lg bg-error-container text-on-error-container text-xs font-bold shrink-0 flex items-center gap-1" title="Devolver el territorio a central">
               <span class="material-symbols-outlined text-[16px]">assignment_return</span>
@@ -228,7 +228,7 @@
           <div class="flex flex-col gap-1">
             <div class="flex justify-between items-baseline">
               <span class="text-sm text-on-surface-variant">Avance de cuadrilla</span>
-              <span class="text-sm font-bold text-primary" id="sectorProgreso">—</span>
+              <span class="text-sm font-bold text-primary" id="territorioProgreso">—</span>
             </div>
             <div class="w-full h-3 rounded-full bg-surface-container overflow-hidden flex">
               <div class="h-full" id="barVisitado" style="width:0%;background:#003f19"></div>

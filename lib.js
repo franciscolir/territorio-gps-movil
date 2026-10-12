@@ -112,7 +112,7 @@ function colaResumen(ops) {
 }
 
 // Avance del territorio a partir de sus puntos (pct = visitados sobre el total).
-function sectorAvance(puntos) {
+function territorioAvance(puntos) {
   const r = { total: puntos.length, pendiente: 0, visitado: 0, erroneo: 0, no_pasar: 0, pct: 0 };
   for (const p of puntos) {
     const e = p && p.estado && Object.prototype.hasOwnProperty.call(r, p.estado)

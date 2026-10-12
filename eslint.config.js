@@ -27,7 +27,7 @@ const libGlobals = Object.fromEntries(
   [
     'ESTADOS', 'PIN_ICONS', 'estadoLabel',
     'escapeHtml', 'pointFromGeom', 'pointInGeometry',
-    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'sectorAvance',
+    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
   ].map((k) => [k, 'readonly'])
 );
 
