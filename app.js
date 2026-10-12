@@ -19,16 +19,17 @@ const COLA_KEY = 'gps_movil_cola';
 // ============================================================
 const { createClient } = supabase;
 // storageKey propio: la sesión del móvil no compite con la del escritorio
-// (misma URL, dos pestañas). El lock serializa refreshes entre pestañas.
+// (misma URL, dos pestañas). SIN lock custom: el lock sobre navigator.locks
+// no soporta re-entrada y podía auto-bloquearse cuando un flujo de auth
+// (onAuthStateChange → refrescar → refreshSession) corría dentro de otro
+// lock, dejando la app colgada tras recargar (sin sesión, sin mapa, sin
+// poder cerrar sesión). Sin lock, un refresh concurrente entre pestañas
+// es inofensivo (gana el último token escrito).
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     storageKey: 'gps-movil-session',
-    lock: (name, acquireTimeout, fn) =>
-      (typeof navigator !== 'undefined' && navigator.locks)
-        ? navigator.locks.request(name, () => fn())
-        : fn(),
   },
 });
 
@@ -1347,7 +1348,7 @@ setInterval(() => {
   pintarTabs();
   try {
     const { data } = await db.auth.getSession();
-    if (data?.session?.user) await entrar(data.session.user);
+    if (data?.session?.user && !user) await entrar(data.session.user);
   } catch (e) {
     console.error(e);
     toast('No se pudo recuperar la sesión: ' + e.message, { error: true });
