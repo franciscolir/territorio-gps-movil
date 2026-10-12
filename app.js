@@ -370,7 +370,11 @@ async function cargarAsignacion({ reintentado = false } = {}) {
     .from('territorios_asignaciones')
     .select('territorio_id, estado, assigned_at, territorios ( id, nombre, comuna, color, geom )')
     .eq('user_id', user.id)
-    .eq('estado', 'activa')
+    // 'completado' (auto al 100 %, migración 008) sigue visible para revisar/enviar;
+    // la más reciente gana si coexisten con una nueva asignación
+    .in('estado', ['activa', 'completado'])
+    .order('assigned_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) {
     if (!esErrorDeRed(error) && !reintentado && esErrorDeSesion(error)) {
