@@ -31,6 +31,18 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     storageKey: 'gps-movil-session',
   },
+  // Token POR PETICIÓN: al recargar, la sesión sale de storage y las consultas
+  // REST/RPC salen siempre con el token vigente (antes salían con el token
+  // viejo/anónimo hasta que el cliente sincronizaba sus headers → RLS
+  // respondía 0 filas y se "perdía" el territorio asignado).
+  accessToken: async () => {
+    try {
+      const { data } = await db.auth.getSession();
+      return data?.session?.access_token ?? null;
+    } catch (_) {
+      return null;
+    }
+  },
 });
 
 let user = null;
