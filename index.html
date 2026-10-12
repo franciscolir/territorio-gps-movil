@@ -290,9 +290,14 @@
       <div id="mapView" class="hidden flex-col w-full px-4 pt-2 gap-3">
         <div class="relative w-full h-[55vh] rounded-xl overflow-hidden bg-surface-container shadow-sm">
           <div id="mapMovil"></div>
-          <button id="btnCentrar" class="absolute top-2 right-2 w-11 h-11 rounded-xl bg-surface-container-lowest/95 backdrop-blur shadow-sm flex items-center justify-center" title="Centrar en mi ubicación">
-            <span class="material-symbols-outlined text-secondary text-[22px]">my_location</span>
-          </button>
+          <div class="absolute top-2 right-2 flex flex-col gap-2">
+            <button id="btnSatelite" class="w-11 h-11 rounded-xl bg-surface-container-lowest/95 backdrop-blur shadow-sm flex items-center justify-center text-secondary" title="Vista satélite" aria-label="Vista satélite">
+              <span class="material-symbols-outlined text-[22px]">satellite_alt</span>
+            </button>
+            <button id="btnCentrar" class="w-11 h-11 rounded-xl bg-surface-container-lowest/95 backdrop-blur shadow-sm flex items-center justify-center" title="Centrar en mi ubicación">
+              <span class="material-symbols-outlined text-secondary text-[22px]">my_location</span>
+            </button>
+          </div>
           <div class="absolute bottom-2 left-2 right-2 bg-surface-container-lowest/95 backdrop-blur rounded-lg p-2 flex justify-around text-xs font-semibold pointer-events-none" id="mapLegend"></div>
         </div>
         <button id="btnNavegar" class="min-h-[48px] rounded-xl bg-primary text-on-primary text-sm font-semibold flex items-center justify-center gap-2 active:bg-secondary">

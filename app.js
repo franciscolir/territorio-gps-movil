@@ -43,6 +43,7 @@ let filtroActual = 'todos';
 let map = null;
 let mapListo = false;
 let markers = {};       // id -> Marker
+let sateliteActiva = false; // vista satélite del mapa (por instancia de mapa)
 let sheetPunto = null;  // { id, lat, lng, esNuevo }
 let statusTarget = null;
 let undoInfo = null;    // { id, prev, timer }
@@ -281,6 +282,7 @@ $('btnCentrar').addEventListener('click', () => {
   if (!gpsUltima) { activarGps(); toast('Activando ubicación…'); return; }
   map.flyTo({ center: [gpsUltima.lng, gpsUltima.lat], zoom: Math.max(map.getZoom(), 16), duration: 400 });
 });
+$('btnSatelite').addEventListener('click', alternarSatelite);
 setGpsEstado('pendiente');
 
 // ============================================================
@@ -831,6 +833,40 @@ function initMap() {
   });
 }
 
+// ============================================================
+// VISTA SATÉLITE (Esri World Imagery) — reemplaza el fondo del mapa.
+// Se inserta bajo la primera capa de símbolos: los rótulos de calles
+// quedan legibles y el polígono/pines/ubicación se dibujan encima.
+// ============================================================
+function alternarSatelite() {
+  if (!map || !mapListo) return;
+  const btn = $('btnSatelite');
+  if (sateliteActiva) {
+    if (map.getLayer('satelite-layer')) map.removeLayer('satelite-layer');
+    if (map.getSource('satelite')) map.removeSource('satelite');
+    sateliteActiva = false;
+    btn.classList.remove('bg-primary', 'text-on-primary');
+    btn.classList.add('bg-surface-container-lowest/95', 'text-secondary');
+    return;
+  }
+  const capas = map.getStyle().layers || [];
+  const simbolo = capas.find((c) => c.type === 'symbol');
+  map.addSource('satelite', {
+    type: 'raster',
+    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: 'Esri, Maxar, Earthstar Geographics',
+  });
+  map.addLayer(
+    { id: 'satelite-layer', type: 'raster', source: 'satelite', paint: {} },
+    simbolo ? simbolo.id : undefined
+  );
+  sateliteActiva = true;
+  btn.classList.add('bg-primary', 'text-on-primary');
+  btn.classList.remove('bg-surface-container-lowest/95', 'text-secondary');
+}
+
 function ajustarVistaMapa() {
   if (!map || !territorio) return;
   const bb = bboxDeGeometria(territorio.territorios.geom);
@@ -1197,7 +1233,7 @@ $('btnDevolver').addEventListener('click', () => {
       }
       territorio = null;
       puntos = [];
-      if (map) { map.remove(); map = null; mapListo = false; markers = {}; }
+      if (map) { map.remove(); map = null; mapListo = false; markers = {}; sateliteActiva = false; }
       pintarTodo();
       toast('Territorio devuelto a central');
     }
