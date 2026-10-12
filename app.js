@@ -53,6 +53,9 @@ let opSeq = 0;
 const modoCard = {};
 const borradorNota = {};
 
+// Aviso de territorio completado (modal revisar/enviar)
+let avisoTerritorioId = null; // sector_id que ya mostró el modal (no repetir)
+
 // Configuración local (persistida en localStorage)
 let appMapa = 'google';   // 'google' | 'waze' | 'apple'
 let tema = 'claro';       // 'claro' | 'oscuro'
@@ -110,7 +113,7 @@ document.querySelectorAll('[data-close]').forEach((b) => {
   b.addEventListener('click', () => sheetClose(b.dataset.close));
 });
 // Clic fuera de la hoja = cerrar
-for (const id of ['statusSheet', 'pointSheet', 'confirmSheet', 'configSheet']) {
+for (const id of ['statusSheet', 'pointSheet', 'confirmSheet', 'configSheet', 'completadoSheet', 'revisionSheet']) {
   $(id).addEventListener('click', (e) => { if (e.target === $(id)) sheetClose(id); });
 }
 
@@ -464,31 +467,36 @@ function cerrarZona(zona, id) {
   zona.querySelector('.estados-wrap')?.classList.remove('abierta');
 }
 
-async function guardarNotaRapida(zona, id) {
+// Guarda la nota de un punto (RPC; sin señal → cola). true = quedó guardada o en cola
+async function guardarNotaPunto(id, texto) {
   const p = puntoPorId(id);
-  if (!p) return;
-  const nota = (borradorNota[id] ?? '').trim();
+  if (!p) return false;
+  const t = (texto || '').trim();
   const c = coordsDe(p) || {};
   const { error } = await db.rpc('actualizar_punto_terreno', {
     p_id: id, p_nombre: p.nombre, p_direccion: p.direccion || '',
-    p_notas: nota, p_lat: c.lat ?? p.lat, p_lng: c.lng ?? p.lng,
+    p_notas: t, p_lat: c.lat ?? p.lat, p_lng: c.lng ?? p.lng,
   });
   if (error) {
     if (esErrorDeRed(error)) {
-      encolar('editar', id, { nombre: p.nombre, direccion: p.direccion || '', notas: nota, lat: c.lat, lng: c.lng });
-      p.notas = nota;
-      actualizarNotasEnCard(zona, nota);
+      encolar('editar', id, { nombre: p.nombre, direccion: p.direccion || '', notas: t, lat: c.lat, lng: c.lng });
       toast('Sin señal: la nota quedó en cola local');
-      cerrarZona(zona, id);
-      return;
+    } else {
+      toast(error.message, { error: true });
+      return false;
     }
-    toast(error.message, { error: true });
-    return;
+  } else {
+    toast('Nota guardada');
   }
-  p.notas = nota;
-  actualizarNotasEnCard(zona, nota);
+  p.notas = t;
+  return true;
+}
+
+async function guardarNotaRapida(zona, id) {
+  const ok = await guardarNotaPunto(id, borradorNota[id]);
+  if (!ok) return;
+  actualizarNotasEnCard(zona, puntoPorId(id)?.notas || '');
   delete borradorNota[id];
-  toast('Nota guardada');
   cerrarZona(zona, id);
 }
 
@@ -1061,7 +1069,88 @@ async function aplicarEstado(id, estado, { silent = false, mantenerLista = false
       undo: prev !== estado ? { id, prev } : null,
     });
   }
+  avisarSiCompleto();
 }
+
+// ============================================================
+// TERRITORIO COMPLETADO: modal con Revisar / Enviar
+// La tabla de revisión SOLO se puede ver desde ese modal.
+// ============================================================
+function territorioCompleto() {
+  if (!territorio || !puntos.length) return false;
+  if (cola.some((o) => o.tipo === 'crear')) return false; // puntos locales sin sync
+  return territorioAvance(puntos).pendiente === 0;
+}
+
+function avisarSiCompleto() {
+  if (!territorio || avisoTerritorioId === territorio.territorio_id) return;
+  if (!territorioCompleto()) return;
+  avisoTerritorioId = territorio.territorio_id;
+  $('completadoNombre').textContent = territorio.territorios.nombre || 'el territorio';
+  sheetOpen('completadoSheet');
+}
+
+function abrirRevision() {
+  sheetClose('completadoSheet');
+  $('revisionTitulo').textContent = territorio ? territorio.territorios.nombre : '—';
+  pintarRevision();
+  sheetOpen('revisionSheet');
+}
+
+function pintarRevision() {
+  const av = territorioAvance(puntos);
+  $('revisionResumen').textContent =
+    `${av.visitado} visitados · ${av.erroneo} erróneos · ${av.no_pasar} no pasar`;
+  const box = $('revisionTabla');
+  box.innerHTML = puntos.map((p) => {
+    const est = p.estado || 'pendiente';
+    const c = coordsDe(p);
+    const opciones = ESTADOS.map(([valor, etiqueta]) =>
+      `<option value="${valor}" ${valor === est ? 'selected' : ''}>${etiqueta}</option>`).join('');
+    return `
+    <div class="rounded-xl bg-surface-container-low p-3 flex flex-col gap-2" data-rev="${escapeHtml(p.id)}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex flex-col min-w-0">
+          <p class="text-sm font-semibold text-on-surface truncate">${escapeHtml(p.nombre || 'Sin nombre')}</p>
+          <p class="text-xs text-on-surface-variant truncate">${escapeHtml(p.direccion || (c ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` : 'Sin dirección'))}</p>
+        </div>
+        <span data-chip-rev>${chipEstado(est)}</span>
+      </div>
+      <div class="grid grid-cols-5 gap-2">
+        <input data-rev-notas="${escapeHtml(p.id)}" value="${escapeHtml(p.notas || '')}"
+               placeholder="Notas…"
+               class="col-span-3 min-h-[44px] px-3 rounded-lg bg-surface-container-lowest text-on-surface text-sm outline-none border border-outline-variant focus:border-secondary min-w-0" />
+        <select data-rev-estado="${escapeHtml(p.id)}"
+                class="col-span-2 min-h-[44px] px-2 rounded-lg bg-surface-container-lowest text-on-surface text-sm outline-none border border-outline-variant focus:border-secondary min-w-0">
+          ${opciones}
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+
+  box.querySelectorAll('[data-rev-estado]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const id = sel.dataset.revEstado;
+      aplicarEstado(id, sel.value, { mantenerLista: true });
+      const chip = sel.closest('[data-rev]')?.querySelector('[data-chip-rev]');
+      if (chip) chip.innerHTML = chipEstado(sel.value);
+    });
+  });
+  box.querySelectorAll('[data-rev-notas]').forEach((inp) => {
+    inp.addEventListener('change', () => guardarNotaPunto(inp.dataset.revNotas, inp.value));
+  });
+}
+
+async function enviarTerritorio() {
+  sheetClose('completadoSheet');
+  sheetClose('revisionSheet');
+  await sincronizar(); // vacía la cola si hay pendientes y refresca datos
+  toast('Territorio enviado a central');
+}
+
+$('btnRevisar').addEventListener('click', abrirRevision);
+$('btnEnviarTerritorio').addEventListener('click', enviarTerritorio);
+$('btnRevisionEnviar').addEventListener('click', enviarTerritorio);
 
 // ============================================================
 // BORRAR (solo puntos creados por el colaborador)
@@ -1194,6 +1283,7 @@ async function sincronizar() {
   $('syncBtnIcon').classList.remove('spin-slow');
   await refrescar({ ajustarMapa: true });
   pintarTodo();
+  avisarSiCompleto();
 
   const partes = [];
   if (listos) partes.push(`${listos} sincronizado${listos === 1 ? '' : 's'}`);
