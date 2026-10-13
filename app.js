@@ -390,11 +390,10 @@ async function cargarAsignacion({ reintentado = false } = {}) {
     .from('territorios_asignaciones')
     .select('territorio_id, estado, assigned_at, territorios ( id, nombre, comuna, color, geom )')
     .eq('user_id', user.id)
-    // 'completado' (auto al 100 %, migración 008) sigue visible para revisar/enviar;
-    // la más reciente gana si coexisten con una nueva asignación
-    .in('estado', ['activa', 'completado'])
-    .order('assigned_at', { ascending: false })
-    .limit(1)
+    // Solo asignaciones activas: al completarse (auto al 100 %, migración 008)
+    // el colaborador deja de ver el territorio y sus puntos. La reasignación
+    // inserta una fila 'activa' nueva (migración 010 reinicia los visitados).
+    .eq('estado', 'activa')
     .maybeSingle();
   if (error) {
     if (!esErrorDeRed(error) && !reintentado && esErrorDeSesion(error)) {

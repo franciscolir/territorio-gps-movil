@@ -30,20 +30,37 @@ export function crearMockDb({ session = null, fromHandlers = {}, rpcHandlers = {
     auth,
     from(tabla) {
       llamadas.from.push(tabla);
+      const filtros = [];
       const builder = {};
-      for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit', 'range']) {
+      for (const m of ['select', 'is', 'in', 'order', 'limit', 'range']) {
         builder[m] = () => builder;
       }
+      // eq sí filtra (como PostgREST): array → filtra filas; objeto → si no
+      // coincide, responde sin filas
+      builder.eq = (col, val) => {
+        filtros.push([col, val]);
+        return builder;
+      };
       const ejecutar = () => {
         // Simula el mundo real: sin señal, el fetch falla con error de red
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           return Promise.resolve({ data: null, error: { message: 'Failed to fetch' } });
         }
-        return Promise.resolve(
-          typeof fromHandlers[tabla] === 'function'
-            ? fromHandlers[tabla]()
-            : (fromHandlers[tabla] ?? { data: null, error: null })
-        );
+        const base = typeof fromHandlers[tabla] === 'function'
+          ? fromHandlers[tabla]()
+          : (fromHandlers[tabla] ?? { data: null, error: null });
+        let resp = base;
+        if (resp?.data != null && filtros.length) {
+          if (Array.isArray(resp.data)) {
+            resp = {
+              ...resp,
+              data: resp.data.filter((fila) => filtros.every(([c, v]) => fila?.[c] === v)),
+            };
+          } else if (filtros.some(([c, v]) => resp.data?.[c] !== v)) {
+            resp = { data: null, error: null };
+          }
+        }
+        return Promise.resolve(resp);
       };
       builder.maybeSingle = ejecutar;
       builder.single = ejecutar;

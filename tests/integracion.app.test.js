@@ -28,7 +28,7 @@ describe('cargarAsignacion', () => {
     expect(e.user.email).toBe(USER.email);
   });
 
-  it('acepta también la asignación en estado completado (migración 008)', async () => {
+  it('asignación completada (migración 008) ya NO es visible para el colaborador', async () => {
     const handlers = fromBase();
     handlers.territorios_asignaciones = {
       data: { ...handlers.territorios_asignaciones.data, estado: 'completado' },
@@ -40,7 +40,9 @@ describe('cargarAsignacion', () => {
 
     await app.entrar(USER);
 
-    expect(app.__estado().territorio.estado).toBe('completado');
+    expect(app.__estado().territorio).toBeNull();
+    // pasa a modo libre (sin datos exclusivos de territorio)
+    expect(document.getElementById('secTerritorio').classList.contains('hidden')).toBe(true);
   });
 
   it('sin asignación → territorio null y modo libre (mapa general), sin error', async () => {
