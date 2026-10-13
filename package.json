@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:db": "vitest run tests/e2e.db.test.js",
     "test:watch": "vitest",
     "lint": "eslint ."
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
     "eslint": "^9.0.0",
+    "jsdom": "^29.1.1",
     "vitest": "^3.0.0"
   }
 }

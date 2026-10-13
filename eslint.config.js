@@ -83,14 +83,26 @@ export default [
     },
   },
 
-  // Tests y config (ESM)
+  // Tests y config (ESM): mezclan globals de Node (fs, path) y de navegador
+  // (jsdom: document, window, navigator, localStorage) + los de Vitest
   {
     files: ['tests/**/*.js', 'eslint.config.js'],
     ...recommended,
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: node,
+      globals: {
+        ...node,
+        ...browser,
+        Event: 'readonly',
+        CustomEvent: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        beforeAll: 'readonly',
+        vi: 'readonly',
+      },
     },
     rules: {
       ...recommended.rules,

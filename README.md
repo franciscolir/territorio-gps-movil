@@ -117,14 +117,27 @@ Lecturas: `territorios_asignaciones` (asignación activa con el territorio anida
 ## Tests y lint
 
 ```bash
-npm test        # tests de lib.js (geometría, EWKB, estados, cola offline, avance)
+npm test        # toda la suite: unitarias + integración + E2E (mock) + E2E real
+npm run test:db # solo E2E real contra la BD (fetch directo, sin deps)
 npm run lint    # ESLint, 0 errores
 ```
 
+Cuatro capas de pruebas (Vitest + jsdom):
+
+| Capa | Archivo | Qué prueba |
+|---|---|---|
+| **Unitarias** | `tests/lib.test.js` | Funciones puras de `lib.js`: escaping, EWKB/GeoJSON, punto-en-polígono, estados, cola offline, avance (mocks: ninguno) |
+| **Integración** | `tests/integracion.app.test.js` | Lógica de `app.js` con **DB mock** (`tests/helpers/mockSupabase.js`) y el DOM real de `index.html` en jsdom: `cargarAsignacion` (reintentos, red caída), cola offline (`ejecutarOp`, `sincronizar`), `aplicarEstado` (optimista/revertir/encolar), notas, GPS, links de mapas, sesión |
+| **E2E con mock** | `tests/e2e.mock.test.js` | Flujo completo del usuario sobre el DOM + DB simulada: arranque con sesión restaurada, marcar estados desde cards, modal de territorio completado → revisión in situ → enviar, offline→online, nota rápida, devolución |
+| **E2E real** | `tests/e2e.db.test.js` | Solo lo mínimo y crítico contra la BD real con `fetch` (sin dependencias): API viva, tablas existen, login real, consulta autenticada (grants+RLS) y RPCs desplegados. Los tests autenticados se **saltan** sin env vars: `SUPABASE_TEST_EMAIL` / `SUPABASE_TEST_PASSWORD` (y opcionalmente `SUPABASE_URL` / `SUPABASE_ANON_KEY`) |
+
 `lib.js` está pensado para testearse: las funciones no tocan DOM ni estado
-global, y los tests cargan su fuente con `new Function()` (ver
-`tests/lib.test.js`). Si agregas una función a `lib.js`, agrégala al `return`
-del wrapper de tests y a `libGlobals` en `eslint.config.js`.
+global. `app.js` se evalúa en los tests igual que en el navegador: `lib.js`
++ `app.js` como scripts clásicos dentro del DOM real de `index.html`, con
+`supabase` sustituido por el mock (`accessToken`/`from`/`rpc` simulados;
+sin señal el mock devuelve error de red, igual que un fetch real).
+Si agregas una función a `lib.js`, agrégala al `return` del wrapper de
+tests y a `libGlobals` en `eslint.config.js`.
 
 ## Despliegue
 
