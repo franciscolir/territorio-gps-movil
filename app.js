@@ -363,7 +363,8 @@ async function refrescar({ ajustarMapa = false } = {}) {
   // se asegura vigencia antes de consultar (y reintenta si aun así falla)
   await asegurarSesionVigente();
   await cargarAsignacion();
-  if (territorio) await cargarPuntos();
+  await cargarPuntos(); // con territorio: los suyos; en modo libre: mapa general
+  await cargarTareas();
   if (mapListo && ajustarMapa) ajustarVistaMapa();
 }
 
@@ -411,12 +412,11 @@ async function cargarAsignacion({ reintentado = false } = {}) {
 }
 
 async function cargarPuntos() {
-  const { data, error } = await db
-    .from('puntos')
-    .select('*')
-    .eq('territorio_id', territorio.territorio_id)
-    .is('deleted_at', null)
-    .order('nombre');
+  // Con territorio: solo sus puntos. En modo libre (sin asignación): mapa
+  // general — la RLS ahora deja leer todos los puntos vivos (solo lectura).
+  let query = db.from('puntos').select('*').is('deleted_at', null).order('nombre');
+  if (territorio) query = query.eq('territorio_id', territorio.territorio_id);
+  const { data, error } = await query;
   if (error) {
     if (!esErrorDeRed(error)) toast('No se pudieron cargar los puntos: ' + error.message, { error: true });
     return;
@@ -561,13 +561,23 @@ function actualizarEstadoEnCard(zona, est) {
 }
 
 function pintarVistaTerritorio() {
-  const vacio = !territorio;
+  // Sin territorio asignado (y sin error de carga) la app entra en MODO LIBRE:
+  // mapa general + crear puntos, sin gestión ni datos exclusivos de territorio.
+  const vacio = !territorio && !!errorTerritorio;
+  const libre = !territorio && !errorTerritorio;
   $('emptyView').classList.toggle('hidden', !vacio);
   $('emptyView').classList.toggle('flex', vacio);
   $('appView').classList.toggle('hidden', vacio);
   const err = $('emptyError');
   err.textContent = errorTerritorio ? 'Detalle: ' + errorTerritorio : '';
   err.classList.toggle('hidden', !errorTerritorio);
+  // Elementos exclusivos de un territorio asignado
+  $('secTerritorio').classList.toggle('hidden', libre);
+  $('btnNavegar').classList.toggle('hidden', libre);
+  const hint = $('mapHint');
+  if (hint) hint.textContent = libre
+    ? 'Toca el mapa para agregar un punto nuevo'
+    : 'Toca el mapa para agregar un punto nuevo en tu territorio';
 }
 
 function pintarCola() {
@@ -611,9 +621,10 @@ function textoOp(tipo) {
 }
 
 function pintarTarjetaTerritorio() {
+  if (!territorio) return; // modo libre: la tarjeta está oculta
   const av = territorioAvance(puntos);
   const extra = colaResumen(cola).crear;
-  $('territorioNombre').textContent = territorio ? territorio.territorios.nombre : '—';
+  $('territorioNombre').textContent = territorio.territorios.nombre || '—';
   $('territorioProgreso').textContent = `${av.visitado} de ${av.total} visitados (${av.pct}%)`;
   const pct = (n) => (av.total ? (n / av.total) * 100 : 0) + '%';
   $('barVisitado').style.width = pct(av.visitado);
@@ -623,7 +634,6 @@ function pintarTarjetaTerritorio() {
   $('cntErroneo').textContent = av.erroneo;
   $('cntNoPasar').textContent = av.no_pasar;
   $('cntPendiente').textContent = av.pendiente + extra;
-  $('tabListCount').textContent = av.total + extra;
 }
 
 function pintarFiltros() {
@@ -663,6 +673,29 @@ function pintarLista() {
 
   if (!todo.length) {
     box.innerHTML = '<div class="text-sm text-on-surface-variant text-center py-8">No hay puntos con este filtro.</div>';
+    return;
+  }
+
+  // Modo libre (sin territorio asignado): tarjetas de solo lectura. Los
+  // cambios de estado los valida la DB contra el territorio activo, así que
+  // aquí no se ofrecen acciones de trabajo.
+  if (!territorio) {
+    box.innerHTML = todo.map((p) => {
+      const coords = coordsDe(p);
+      const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : null;
+      return `
+      <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex flex-col min-w-0">
+            <span class="text-[11px] font-bold text-on-surface-variant">PDV</span>
+            <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+            <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || 'Sin dirección')}</p>
+          </div>
+          <span data-chip>${chipEstado(p.estado || 'pendiente')}</span>
+        </div>
+        ${nav ? `<a class="text-xs text-secondary font-semibold flex items-center gap-1" href="${nav}" target="_blank" rel="noopener"><span class="material-symbols-outlined text-[16px]">near_me</span>Cómo llegar</a>` : ''}
+      </article>`;
+    }).join('');
     return;
   }
 
@@ -806,16 +839,18 @@ function bboxDeGeometria(geom) {
 }
 
 function initMap() {
-  if (map || !territorio) return;
+  if (map) return;   // también se crea en modo libre (sin territorio asignado)
   const gl = document.createElement('canvas').getContext('webgl2')
     || document.createElement('canvas').getContext('webgl');
   if (!gl) {
     toast('WebGL no está disponible en este navegador', { error: true });
     return;
   }
-  const geom = territorio.territorios.geom;
-  const bb = bboxDeGeometria(geom);
-  const centro = bb ? [(bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2] : [-70.6483, -33.457];
+  let centro = [-70.6483, -33.457]; // Santiago centro (modo libre)
+  if (territorio) {
+    const bb = bboxDeGeometria(territorio.territorios.geom);
+    if (bb) centro = [(bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2];
+  }
 
   map = new maplibregl.Map({
     container: 'mapMovil',
@@ -826,8 +861,10 @@ function initMap() {
   });
 
   map.on('load', () => {
-    if (geom) {
-      map.addSource('territorio-movil', { type: 'geojson', data: { type: 'Feature', geometry: geom, properties: {} } });
+    // El polígono del territorio solo se muestra con el proceso «en proceso»:
+    // al completarlo (revisión/envío) el mapa pasa a plano de puntos.
+    if (territorio?.estado === 'activa' && territorio.territorios?.geom) {
+      map.addSource('territorio-movil', { type: 'geojson', data: { type: 'Feature', geometry: territorio.territorios.geom, properties: {} } });
       map.addLayer({
         id: 'territorio-movil-fill', type: 'fill', source: 'territorio-movil',
         paint: { 'fill-color': territorio.territorios.color || '#3b82f6', 'fill-opacity': 0.08 },
@@ -884,16 +921,38 @@ function alternarSatelite() {
   btn.classList.remove('bg-surface-container-lowest/95', 'text-secondary');
 }
 
+// Encuadra un conjunto de coordenadas [[lng,lat],…] calculando la caja con
+// los extremos: fitBounds exige exactamente dos esquinas, no N puntos.
+function encuadrarCoords(coords, opts = {}) {
+  if (!map || !coords.length) return;
+  if (coords.length === 1) {
+    map.easeTo({ center: coords[0], zoom: Math.max(map.getZoom(), 15), duration: 300 });
+    return;
+  }
+  const lngs = coords.map((c) => c[0]);
+  const lats = coords.map((c) => c[1]);
+  map.fitBounds(
+    [
+      [Math.min(...lngs), Math.min(...lats)],
+      [Math.max(...lngs), Math.max(...lats)],
+    ],
+    { padding: 40, duration: 0, ...opts }
+  );
+}
+
 function ajustarVistaMapa() {
-  if (!map || !territorio) return;
-  const bb = bboxDeGeometria(territorio.territorios.geom);
-  if (bb) {
-    map.fitBounds(bb, { padding: 40, duration: 0 });
-  } else if (puntos.length) {
-    const coords = puntos.map(coordsDe).filter(Boolean).map((c) => [c.lng, c.lat]);
-    if (coords.length) {
-      map.fitBounds(coords, { padding: 40, duration: 0 });
+  if (!map || !mapListo) return;
+  if (territorio) {
+    const bb = bboxDeGeometria(territorio.territorios.geom);
+    if (bb) {
+      map.fitBounds(bb, { padding: 40, duration: 0 });
+      return;
     }
+  }
+  // Modo libre (o territorio sin geometría): encuadrar los puntos visibles
+  if (puntos.length) {
+    const coords = puntos.map(coordsDe).filter(Boolean).map((c) => [c.lng, c.lat]);
+    encuadrarCoords(coords);
   }
 }
 
@@ -902,13 +961,13 @@ function actualizarCapaPuntos() {
   Object.values(markers).forEach((m) => m.remove());
   markers = {};
 
-  const pintar = (p, { local = false } = {}) => {
+  const pintar = (p, { local = false, tarea = false } = {}) => {
     const c = coordsDe(p);
     if (!c) return;
     const est = p.estado || 'pendiente';
     const el = document.createElement('div');
     el.className = 'pin-wrap';
-    el.innerHTML = `<div class="pin${local ? ' is-nuevo' : ''}" data-est="${est}"><span class="ms pin-ic material-symbols-outlined text-[15px]">${PIN_ICONS[est] || 'schedule'}</span></div>`;
+    el.innerHTML = `<div class="pin${local ? ' is-nuevo' : ''}${tarea ? ' is-tarea' : ''}" data-est="${est}"><span class="ms pin-ic material-symbols-outlined text-[15px]">${PIN_ICONS[est] || 'schedule'}</span></div>`;
     el.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (local) return;
@@ -917,9 +976,19 @@ function actualizarCapaPuntos() {
     markers[p.id] = new maplibregl.Marker({ element: el }).setLngLat([c.lng, c.lat]).addTo(map);
   };
 
-  puntos.forEach((p) => pintar(p));
+  // Los puntos con tarea especial se distinguen con aureola púrpura, aunque
+  // ya estén entre los puntos cargados (en modo libre se ven todos).
+  const idsTarea = new Set(tareas.map((t) => t.punto_id));
+  puntos.forEach((p) => pintar(p, { tarea: idsTarea.has(p.id) }));
   cola.filter((o) => o.tipo === 'crear').forEach((o) => {
     pintar({ id: o.clave, estado: 'pendiente', lat: o.datos.lat, lng: o.datos.lng }, { local: true });
+  });
+
+  // Tareas de puntos fuera de la lista actual (otro territorio)
+  tareas.forEach((t) => {
+    const p = t.puntos;
+    if (!p || idsTarea.has(t.punto_id) && puntos.some((x) => x.id === t.punto_id)) return;
+    pintar(p, { tarea: true });
   });
 
   const av = territorioAvance(puntos);
@@ -960,8 +1029,16 @@ function abrirFicha(id) {
   const coords = coordsDe(p);
   $('btnPointNav').href = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
   $('btnPointNav').classList.toggle('hidden', !coords);
-  $('btnPointStatus').classList.remove('hidden');
-  $('btnPointDelete').classList.toggle('hidden', p.user_id !== user.id);
+  // Modo libre (sin asignación): la ficha es solo lectura — los cambios de
+  // estado/edición los valida la DB contra el territorio activo del usuario.
+  const libre = !territorio;
+  $('btnPointStatus').classList.toggle('hidden', libre);
+  $('btnPointDelete').classList.toggle('hidden', libre || p.user_id !== user.id);
+  const btnSave = document.getElementById('btnPointSave');
+  if (btnSave) btnSave.classList.toggle('hidden', libre);
+  if (libre) {
+    $('pointSheetBadges').innerHTML += '<span class="text-[11px] font-bold text-on-surface-variant bg-surface-container px-2 py-1 rounded">SOLO LECTURA</span>';
+  }
   $('btnPointSaveLabel').textContent = 'Guardar cambios';
   sheetOpen('pointSheet');
 }
@@ -1017,7 +1094,8 @@ async function guardarFicha() {
 
   if (!nombre) { err.textContent = 'El nombre es obligatorio'; return; }
   if (isNaN(lat) || isNaN(lng)) { err.textContent = 'Latitud/longitud inválidas'; return; }
-  if (!dentroDelTerritorio(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu territorio'; return; }
+  if (territorio && !dentroDelTerritorio(lat, lng)) { err.textContent = 'Las coordenadas quedan fuera de tu territorio'; return; }
+
 
   if (sheetPunto.esNuevo) {
     // Intenta contra el servidor; sin señal, encola la creación
@@ -1270,22 +1348,14 @@ $('btnNavegar').addEventListener('click', () => {
 });
 
 // ============================================================
-// TABS (Mapa / Ruta / Sync)
+// TABS (Mapa / Puntos / Tareas / Sync)
 // ============================================================
 function pintarTabs() {
-  const vistas = { mapa: 'mapView', ruta: 'listView', sync: 'syncView' };
+const vistas = { mapa: 'mapView', ruta: 'listView', sync: 'syncView', tareas: 'tareasView' };
   for (const [tab, id] of Object.entries(vistas)) {
     $(id).classList.toggle('hidden', tab !== tabActual);
     $(id).classList.toggle('flex', tab === tabActual);
   }
-  $('tabListBtn').classList.toggle('bg-surface-container-lowest', tabActual === 'ruta');
-  $('tabListBtn').classList.toggle('text-primary', tabActual === 'ruta');
-  $('tabListBtn').classList.toggle('shadow-sm', tabActual === 'ruta');
-  $('tabListBtn').classList.toggle('text-on-surface-variant', tabActual !== 'ruta');
-  $('tabMapBtn').classList.toggle('bg-surface-container-lowest', tabActual === 'mapa');
-  $('tabMapBtn').classList.toggle('text-primary', tabActual === 'mapa');
-  $('tabMapBtn').classList.toggle('shadow-sm', tabActual === 'mapa');
-  $('tabMapBtn').classList.toggle('text-on-surface-variant', tabActual !== 'mapa');
   document.querySelectorAll('.navtab').forEach((b) => {
     const activo = b.dataset.tab === tabActual;
     b.classList.toggle('text-secondary', activo);
@@ -1294,16 +1364,115 @@ function pintarTabs() {
     b.classList.toggle('text-on-surface-variant', !activo);
   });
   if (tabActual === 'mapa') {
-    if (!map && territorio) {
+    if (!map) {
       try { initMap(); } catch (e) { console.error(e); toast('No se pudo iniciar el mapa: ' + e.message, { error: true }); }
     } else if (map) { map.resize(); actualizarCapaPuntos(); }
   }
+  if (tabActual === 'tareas') cargarTareas();
 }
 
 function irA(tab) { tabActual = tab; pintarTabs(); }
 document.querySelectorAll('.navtab').forEach((b) => b.addEventListener('click', () => irA(b.dataset.tab)));
-$('tabListBtn').addEventListener('click', () => irA('ruta'));
-$('tabMapBtn').addEventListener('click', () => irA('mapa'));
+
+// «Ver en mapa» en la vista de tareas: cambia al mapa y encuadra los puntos
+// de la tarea para navegar rápido al sector.
+$('btnTareasMapa').addEventListener('click', () => {
+  irA('mapa');
+  const encuadrar = () => {
+    const coords = tareas
+      .map((t) => coordsDe(t.puntos || {}))
+      .filter(Boolean)
+      .map((c) => [c.lng, c.lat]);
+    encuadrarCoords(coords, { padding: 60, duration: 300 });
+  };
+  if (!map) return;
+  if (mapListo) encuadrar();
+  else map.once('load', encuadrar);
+});
+
+// ============================================================
+// TAREAS ESPECIALES DE VERIFICACIÓN (doble chequeo asignado por central)
+// Central asigna puntos cuya señal errónea/no pasar debe confirmarse en
+// terreno. El usuario confirma o rechaza; el aviso llega a la vista Nueva
+// actividad del admin.
+// ============================================================
+let tareas = [];
+
+async function cargarTareas() {
+  if (!user) return;
+  const { data, error } = await db
+    .from('tareas_verificacion')
+    .select('id, punto_id, estado, created_at, puntos ( nombre, direccion, estado, geom )')
+    .eq('user_id', user.id)
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (!esErrorDeRed(error)) toast('No se pudieron cargar las tareas: ' + error.message, { error: true });
+    return;
+  }
+  tareas = data || [];
+  pintarTareas();
+  if (mapListo) actualizarCapaPuntos(); // marcadores de tarea al día
+}
+
+function pintarTareas() {
+  const box = $('tareasList');
+  if (!box) return;
+  if (!tareas.length) {
+    box.innerHTML = '<div class="text-sm text-on-surface-variant text-center py-8 bg-surface-container-lowest rounded-xl">Sin tareas de verificación pendientes.</div>';
+    return;
+  }
+  box.innerHTML = tareas.map((t) => {
+    const p = t.puntos || {};
+    const c = coordsDe(p);
+    const nav = c ? linkComoLlegar(c.lat, c.lng) : null;
+    return `
+    <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex flex-col min-w-0">
+          <span class="text-[11px] font-bold text-on-surface-variant">VERIFICAR EN TERRENO</span>
+          <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+          <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || (c ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` : 'Sin dirección'))}</p>
+        </div>
+        ${chipEstado(p.estado || 'pendiente')}
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <button class="min-h-[48px] rounded-xl bg-primary text-on-primary text-sm font-bold flex items-center justify-center gap-1 active:bg-secondary"
+                data-tarea-res="${escapeHtml(t.id)}" data-punto="${escapeHtml(t.punto_id)}" data-res="confirmado">
+          <span class="material-symbols-outlined text-[20px]">task_alt</span><span>Confirmar</span>
+        </button>
+        <button class="min-h-[48px] rounded-xl bg-surface-container text-on-surface text-sm font-bold flex items-center justify-center gap-1 active:opacity-80"
+                data-tarea-res="${escapeHtml(t.id)}" data-punto="${escapeHtml(t.punto_id)}" data-res="rechazado">
+          <span class="material-symbols-outlined text-[20px]">cancel</span><span>Rechazar</span>
+        </button>
+      </div>
+      ${nav ? `<a class="text-xs text-secondary font-semibold flex items-center gap-1" href="${nav}" target="_blank" rel="noopener"><span class="material-symbols-outlined text-[16px]">near_me</span>Cómo llegar</a>` : ''}
+    </article>`;
+  }).join('');
+  box.querySelectorAll('[data-tarea-res]').forEach((b) => {
+    b.addEventListener('click', () => resolverTarea(b.dataset.tareaRes, b.dataset.punto, b.dataset.res));
+  });
+}
+
+async function resolverTarea(tareaId, puntoId, resultado) {
+  const { error } = await db.rpc('resolver_verificacion', {
+    p_punto: puntoId,
+    p_resultado: resultado,
+    p_tarea: tareaId,
+  });
+  if (error) {
+    if (esErrorDeRed(error)) {
+      toast('Sin señal: la verificación se enviará al sincronizar', { error: true });
+      return;
+    }
+    toast(error.message, { error: true });
+    return;
+  }
+  toast(resultado === 'confirmado'
+    ? 'Verificación enviada: el estado quedó confirmado'
+    : 'Verificación enviada: el punto volvió a pendiente');
+  await cargarTareas();
+}
 
 // ============================================================
 // SINCRONIZACIÓN

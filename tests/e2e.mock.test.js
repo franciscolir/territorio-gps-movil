@@ -137,7 +137,7 @@ it('filtro de lista muestra/oculta puntos según estado', () => {
   expect(app.pasarFiltro({ estado: 'visitado' })).toBe(true);
 });
 
-it('devolver territorio: confirmación → RPC → pantalla sin territorio', async () => {
+it('devolver territorio: confirmación → RPC → modo libre (mapa general, sin tarjeta)', async () => {
   document.getElementById('btnDevolver').click();
   await flush();
   expect(document.getElementById('confirmSheet').classList.contains('hidden')).toBe(false);
@@ -147,6 +147,8 @@ it('devolver territorio: confirmación → RPC → pantalla sin territorio', asy
 
   expect(llamadas.rpc.filter((r) => r.nombre === 'devolver_territorio')).toHaveLength(1);
   expect(app.__estado().territorio).toBeNull();
-  expect(document.getElementById('emptyView').classList.contains('hidden')).toBe(false);
-  expect(document.getElementById('appView').classList.contains('hidden')).toBe(true);
+  // sin asignación la app entra en modo libre: el mapa general sigue visible
+  expect(document.getElementById('emptyView').classList.contains('hidden')).toBe(true);
+  expect(document.getElementById('appView').classList.contains('hidden')).toBe(false);
+  expect(document.getElementById('secTerritorio').classList.contains('hidden')).toBe(true);
 });

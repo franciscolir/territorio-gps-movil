@@ -43,7 +43,7 @@ describe('cargarAsignacion', () => {
     expect(app.__estado().territorio.estado).toBe('completado');
   });
 
-  it('sin asignación → territorio null y pantalla de espera, sin error', async () => {
+  it('sin asignación → territorio null y modo libre (mapa general), sin error', async () => {
     const { db } = crearMockDb({});
     instalarGlobales({ db });
     const app = await cargarApp();
@@ -51,7 +51,10 @@ describe('cargarAsignacion', () => {
     await app.entrar(USER);
 
     expect(app.__estado().territorio).toBeNull();
-    expect(document.getElementById('emptyView').classList.contains('hidden')).toBe(false);
+    // modo libre: la app sigue visible con el mapa general, sin tarjeta de territorio
+    expect(document.getElementById('emptyView').classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('appView').classList.contains('hidden')).toBe(false);
+    expect(document.getElementById('secTerritorio').classList.contains('hidden')).toBe(true);
     expect(document.getElementById('emptyError').classList.contains('hidden')).toBe(true);
   });
 

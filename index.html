@@ -43,6 +43,7 @@
     .pin[data-est="erroneo"] { background: #73777f; color: #fff; }
     .pin[data-est="no_pasar"] { background: #ba1a1a; color: #fff; }
     .pin.is-nuevo { outline: 3px solid #ba1a1a; outline-offset: 2px; }
+  .pin.is-tarea { outline: 3px solid #9333ea; outline-offset: 2px; }
     .spin-slow { animation: spin 2.4s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .sheet { transition: transform .18s ease; }
@@ -211,8 +212,8 @@
         </div>
       </section>
 
-      <!-- Tarjeta del territorio asignado -->
-      <section class="px-4 py-2">
+      <!-- Tarjeta del territorio asignado (oculta en modo libre: sin asignación) -->
+      <section class="px-4 py-2" id="secTerritorio">
         <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3">
           <div class="flex items-start justify-between gap-3">
             <div class="flex flex-col min-w-0">
@@ -249,18 +250,6 @@
                 <span class="font-bold text-base text-on-surface-variant" id="cntPendiente">0</span><span class="text-on-surface-variant">Pendientes</span>
               </div>
             </div>
-          </div>
-
-          <!-- Toggle lista / mapa -->
-          <div class="grid grid-cols-2 gap-1 bg-surface-container p-1 rounded-xl" role="tablist">
-            <button id="tabListBtn" class="min-h-[48px] rounded-lg bg-surface-container-lowest text-primary text-sm font-semibold shadow-sm flex items-center justify-center gap-2">
-              <span class="material-symbols-outlined text-[20px]">checklist</span>
-              <span>Lista (<span id="tabListCount">0</span>)</span>
-            </button>
-            <button id="tabMapBtn" class="min-h-[48px] rounded-lg text-on-surface-variant text-sm font-semibold flex items-center justify-center gap-2">
-              <span class="material-symbols-outlined text-[20px]">map</span>
-              <span>Mapa</span>
-            </button>
           </div>
         </div>
       </section>
@@ -304,7 +293,7 @@
           <span class="material-symbols-outlined text-[20px]">turn_sharp_right</span>
           <span>Cómo llegar al siguiente punto</span>
         </button>
-        <p class="text-xs text-on-surface-variant text-center">Toca el mapa para agregar un punto nuevo en tu territorio</p>
+        <p class="text-xs text-on-surface-variant text-center" id="mapHint">Toca el mapa para agregar un punto nuevo en tu territorio</p>
       </div>
 
       <!-- VISTA SYNC -->
@@ -324,6 +313,16 @@
           <p class="text-xs text-on-surface-variant">Los cambios se guardan en el teléfono y se envían solos cuando hay señal.</p>
         </div>
         <div id="syncLista" class="flex flex-col gap-2"></div>
+      </div>
+
+      <!-- VISTA TAREAS ESPECIALES (doble chequeo asignado por central) -->
+      <div id="tareasView" class="hidden flex-col w-full px-4 pt-2 gap-3">
+        <p class="text-xs text-on-surface-variant px-1">Central te pidió verificar estos puntos en terreno: confirma si realmente son erróneos o no pasar, o recházalos si el estado no corresponde.</p>
+        <button id="btnTareasMapa" class="min-h-[48px] rounded-xl bg-secondary text-on-secondary text-sm font-bold flex items-center justify-center gap-2 active:opacity-80">
+          <span class="material-symbols-outlined text-[20px]">map</span>
+          <span>Ver en mapa</span>
+        </button>
+        <section id="tareasList" class="flex flex-col gap-3"></section>
       </div>
     </main>
 
@@ -347,7 +346,11 @@
         </button>
         <button data-tab="ruta" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-secondary bg-surface-container font-semibold">
           <span class="material-symbols-outlined text-[24px]">checklist</span>
-          <span class="text-xs">Ruta</span>
+          <span class="text-xs">Puntos</span>
+        </button>
+        <button data-tab="tareas" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
+          <span class="material-symbols-outlined text-[24px]">fact_check</span>
+          <span class="text-xs">Tareas</span>
         </button>
         <button data-tab="sync" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
           <span class="material-symbols-outlined text-[24px]">sync</span>
