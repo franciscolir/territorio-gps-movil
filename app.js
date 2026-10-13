@@ -322,7 +322,18 @@ $('btnLogout').addEventListener('click', async () => {
   $('loginView').classList.remove('hidden');
 });
 
-db.auth.onAuthStateChange(async (_evento, sesion) => {
+// Eventos de auth: con la opción accessToken el cliente principal NO permite
+// onAuthStateChange (lanza en supabase-js ≥ 2.83). Se usa un cliente de
+// eventos ligero con el MISMO storageKey, que ve la misma sesión y avisa de
+// cambios (p. ej. sesión creada en otra pestaña o revocada).
+const authEventos = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: false, // quien refresca es el cliente principal
+    storageKey: 'gps-movil-session',
+  },
+});
+authEventos.auth.onAuthStateChange(async (_evento, sesion) => {
   if (sesion?.user && !user) await entrar(sesion.user);
 });
 
