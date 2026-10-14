@@ -60,6 +60,29 @@ describe('cargarAsignacion', () => {
     expect(document.getElementById('emptyError').classList.contains('hidden')).toBe(true);
   });
 
+  it('sin territorio NO consulta puntos (norma de seguridad)', async () => {
+    const { db, llamadas } = crearMockDb({});
+    instalarGlobales({ db });
+    const app = await cargarApp();
+
+    await app.entrar(USER);
+
+    expect(app.__estado().territorio).toBeNull();
+    expect(app.__estado().puntos).toEqual([]);
+    expect(llamadas.from).not.toContain('puntos');
+  });
+
+  it('con territorio consulta puntos filtrados por territorio_id', async () => {
+    const { db, llamadas } = crearMockDb({ fromHandlers: fromBase() });
+    instalarGlobales({ db });
+    const app = await cargarApp();
+
+    await app.entrar(USER);
+
+    expect(llamadas.from).toContain('puntos');
+    expect(app.__estado().puntos).toHaveLength(3);
+  });
+
   it('error de sesión (401) → refresca la sesión y reintenta una vez', async () => {
     let intentos = 0;
     let refrescos = 0;

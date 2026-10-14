@@ -411,11 +411,20 @@ async function cargarAsignacion({ reintentado = false } = {}) {
 }
 
 async function cargarPuntos() {
-  // Con territorio: solo sus puntos. En modo libre (sin asignación): mapa
-  // general — la RLS ahora deja leer todos los puntos vivos (solo lectura).
-  let query = db.from('puntos').select('*').is('deleted_at', null).order('nombre');
-  if (territorio) query = query.eq('territorio_id', territorio.territorio_id);
-  const { data, error } = await query;
+  // NORMA DE SEGURIDAD: sin territorio activo NO se consulta nada. El móvil
+  // solo lee puntos de su territorio activo (lo garantiza RLS y este guard
+  // evita incluso intentarlo). Las tareas del admin vienen por su propia
+  // tabla (tareas_verificacion, RLS solo asignado + admin).
+  if (!territorio) {
+    puntos = [];
+    return;
+  }
+  const { data, error } = await db
+    .from('puntos')
+    .select('*')
+    .is('deleted_at', null)
+    .eq('territorio_id', territorio.territorio_id)
+    .order('nombre');
   if (error) {
     if (!esErrorDeRed(error)) toast('No se pudieron cargar los puntos: ' + error.message, { error: true });
     return;
@@ -1043,6 +1052,12 @@ function abrirFicha(id) {
 }
 
 function abrirFichaNueva(lng, lat) {
+  // NORMA DE SEGURIDAD: sin territorio activo asignado por admin no se crean
+  // puntos (la BD también lo rechaza vía RLS y guardar_punto)
+  if (!territorio) {
+    toast('Sin territorio asignado: no puedes crear puntos', { error: true });
+    return;
+  }
   sheetPunto = { id: null, lat, lng, esNuevo: true };
   $('pointSheetKicker').textContent = 'Punto nuevo';
   $('pointSheetTitle').textContent = 'Agregar punto';
