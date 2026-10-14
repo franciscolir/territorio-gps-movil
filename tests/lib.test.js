@@ -16,6 +16,7 @@ const lib = new Function(
      ESTADOS, PIN_ICONS, estadoLabel,
      escapeHtml, pointFromGeom, pointInGeometry, inRing,
      nuevaOpCola, colaAgregar, colaQuitar, colaResumen, territorioAvance,
+     procesoAvance,
    };`
 )();
 
@@ -202,5 +203,40 @@ describe('territorioAvance', () => {
     const r = lib.territorioAvance([{}, { estado: 'raro' }]);
     expect(r.pendiente).toBe(2);
     expect(r.pct).toBe(0);
+  });
+});
+
+describe('procesoAvance (regla de negocio migración 019)', () => {
+  const p = (estado) => ({ estado });
+
+  it('ejemplo del documento: base 2 (1 erróneo no cuenta), 1 gestionado = 50 %', () => {
+    // Al asignar: 1 erróneo (heredado) + 2 pendientes → base 2
+    // Durante el proceso: A → visitado, B sigue pendiente
+    const puntos = [p('erroneo'), p('visitado'), p('pendiente')];
+    expect(lib.procesoAvance(puntos, 2)).toEqual({ base: 2, pend: 1, gest: 1, pct: 50 });
+  });
+
+  it('ambos pendientes gestionados (visitado y no_pasar) = 100 %', () => {
+    const puntos = [p('erroneo'), p('visitado'), p('no_pasar')];
+    expect(lib.procesoAvance(puntos, 2)).toEqual({ base: 2, pend: 0, gest: 2, pct: 100 });
+  });
+
+  it('reasignación: base 1 con los estados heredados = el único pendiente es el 100 %', () => {
+    // Tras el reinicio de visitados: 1 pendiente (antes visitado), 1 erróneo
+    // y 1 no_pasar heredados → el pendiente gestionado completa el proceso
+    expect(lib.procesoAvance([p('pendiente'), p('erroneo'), p('no_pasar')], 1).pct).toBe(0);
+    expect(lib.procesoAvance([p('visitado'), p('erroneo'), p('no_pasar')], 1).pct).toBe(100);
+  });
+
+  it('sin base (asignación legacy) devuelve 0 sin romper', () => {
+    expect(lib.procesoAvance([p('pendiente')], null)).toEqual({ base: 0, pend: 1, gest: 0, pct: 0 });
+    expect(lib.procesoAvance(undefined, 3)).toEqual({ base: 3, pend: 0, gest: 3, pct: 100 });
+  });
+
+  it('puntos nuevos en terreno pueden bajar el avance y el pct no pasa de 100', () => {
+    expect(lib.procesoAvance([p('pendiente'), p('pendiente')], 1)).toEqual({
+      base: 1, pend: 2, gest: 0, pct: 0,
+    });
+    expect(lib.procesoAvance([p('visitado'), p('erroneo')], 1).pct).toBe(100);
   });
 });

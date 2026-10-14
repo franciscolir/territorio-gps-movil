@@ -123,3 +123,18 @@ function territorioAvance(puntos) {
   r.pct = r.total ? Math.round((r.visitado / r.total) * 100) : 0;
   return r;
 }
+
+// Avance del PROCESO de trabajo (regla de negocio, migración 019):
+// la base son los puntos 'pendiente' al momento de asignar (puntos_base
+// de la asignación); gestionados = los que dejaron de estar pendientes
+// (visitado, no_pasar o erróneo). Erróneo y no_pasar se heredan entre
+// asignaciones y NO se reinician; las visitas del proceso anterior vuelven
+// a pendiente al reasignar (por eso la base se recalcula en cada proceso).
+function procesoAvance(puntos, base) {
+  const b = Number(base) || 0;
+  const pend = (puntos || []).filter((p) => p && p.estado === 'pendiente').length;
+  if (!b) return { base: 0, pend, gest: 0, pct: 0 };
+  const gest = Math.max(0, b - pend);
+  const pct = Math.min(100, Math.round((gest / b) * 100));
+  return { base: b, pend, gest, pct };
+}

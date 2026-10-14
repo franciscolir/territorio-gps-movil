@@ -27,7 +27,7 @@ const libGlobals = Object.fromEntries(
   [
     'ESTADOS', 'PIN_ICONS', 'estadoLabel',
     'escapeHtml', 'pointFromGeom', 'pointInGeometry',
-    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance',
+    'nuevaOpCola', 'colaAgregar', 'colaQuitar', 'colaResumen', 'territorioAvance', 'procesoAvance',
   ].map((k) => [k, 'readonly'])
 );
 
@@ -110,3 +110,4 @@ export default [
     },
   },
 ];
+

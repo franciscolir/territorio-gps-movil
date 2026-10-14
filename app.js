@@ -388,7 +388,7 @@ function esErrorDeSesion(error) {
 async function cargarAsignacion({ reintentado = false } = {}) {
   const { data, error } = await db
     .from('territorios_asignaciones')
-    .select('territorio_id, estado, assigned_at, territorios ( id, nombre, comuna, color, geom )')
+    .select('territorio_id, estado, assigned_at, puntos_base, territorios ( id, nombre, comuna, color, geom )')
     .eq('user_id', user.id)
     // Solo asignaciones activas: al completarse (auto al 100 %, migración 008)
     // el colaborador deja de ver el territorio y sus puntos. La reasignación
@@ -631,8 +631,18 @@ function textoOp(tipo) {
 function pintarTarjetaTerritorio() {
   if (!territorio) return; // modo libre: la tarjeta está oculta
   const av = territorioAvance(puntos);
+  const pa = procesoAvance(puntos, territorio.puntos_base);
   const extra = colaResumen(cola).crear;
   $('territorioNombre').textContent = territorio.territorios.nombre || '—';
+  // Avance del proceso: base = pendientes al asignar (migración 019)
+  const boxAv = $('avanceProcesoBox');
+  if (boxAv) {
+    boxAv.classList.toggle('hidden', !pa.base);
+    $('avanceProcesoPct').textContent = pa.pct + ' %';
+    $('avanceProcesoBar').style.width = pa.pct + '%';
+    $('avanceProcesoDetalle').textContent =
+      `${pa.gest} de ${pa.base} puntos pendientes al asignar gestionados · quedan ${pa.pend}`;
+  }
   $('territorioProgreso').textContent = `${av.visitado} de ${av.total} visitados (${av.pct}%)`;
   const pct = (n) => (av.total ? (n / av.total) * 100 : 0) + '%';
   $('barVisitado').style.width = pct(av.visitado);
