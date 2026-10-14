@@ -180,9 +180,9 @@ describe('cola offline', () => {
         marcar_estado: (p) => (p.p_id === 'p-red'
           ? { data: null, error: { message: 'Failed to fetch' } }
           : { data: 'pendiente', error: null }),
-        guardar_punto: (p) => (p.p_nombre === 'Sin señal'
+        crear_solicitud_punto: (p) => (p.p_nombre === 'Sin señal'
           ? { data: null, error: { message: 'NetworkError' } }
-          : { data: 'id-nuevo', error: null }),
+          : { data: 'id-solicitud', error: null }),
         actualizar_punto_terreno: () => ({ data: null, error: { message: 'Punto fuera de tu territorio' } }),
         eliminar_punto_propio: () => ({ data: null, error: null }),
       },

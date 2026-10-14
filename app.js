@@ -584,8 +584,8 @@ function pintarVistaTerritorio() {
   $('btnNavegar').classList.toggle('hidden', libre);
   const hint = $('mapHint');
   if (hint) hint.textContent = libre
-    ? 'Toca el mapa para agregar un punto nuevo'
-    : 'Toca el mapa para agregar un punto nuevo en tu territorio';
+    ? 'Toca el mapa para solicitar un punto nuevo — admin lo confirmará'
+    : 'Toca el mapa para solicitar un punto nuevo en tu territorio — admin lo confirmará';
 }
 
 function pintarCola() {
@@ -735,7 +735,7 @@ function pintarLista() {
     <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3" data-id="${escapeHtml(p.id)}">
       <div class="flex items-start justify-between gap-3">
         <div class="flex flex-col min-w-0 cursor-pointer" data-abrir="${escapeHtml(p.id)}">
-          <span class="text-[11px] font-bold text-on-surface-variant">${local ? 'NUEVO · PENDIENTE SYNC' : 'PDV'}</span>
+          <span class="text-[11px] font-bold text-on-surface-variant">${local ? 'SOLICITUD · PENDIENTE SYNC' : 'PDV'}</span>
           <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
           <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || 'Sin dirección')}</p>
         </div>
@@ -1052,12 +1052,9 @@ function abrirFicha(id) {
 }
 
 function abrirFichaNueva(lng, lat) {
-  // NORMA DE SEGURIDAD: sin territorio activo asignado por admin no se crean
-  // puntos (la BD también lo rechaza vía RLS y guardar_punto)
-  if (!territorio) {
-    toast('Sin territorio asignado: no puedes crear puntos', { error: true });
-    return;
-  }
+  // Desde el móvil un punto nuevo es una SOLICITUD para el admin (no escribe
+  // en public.puntos): permitido con o sin territorio asignado. La BD también
+  // exige el flujo (guardar_punto solo admin; solicitudes via RPC propia).
   sheetPunto = { id: null, lat, lng, esNuevo: true };
   $('pointSheetKicker').textContent = 'Punto nuevo';
   $('pointSheetTitle').textContent = 'Agregar punto';
@@ -1112,21 +1109,21 @@ async function guardarFicha() {
 
 
   if (sheetPunto.esNuevo) {
-    // Intenta contra el servidor; sin señal, encola la creación
-    const { error } = await db.rpc('guardar_punto', {
-      p_id: null, p_nombre: nombre, p_direccion: direccion,
-      p_estado: 'pendiente', p_notas: notas, p_lat: lat, p_lng: lng,
+    // NORMA: desde el móvil no se crean puntos, se envía una SOLICITUD que
+    // el admin confirma o rechaza en Nueva actividad. Sin señal queda en cola.
+    const { error } = await db.rpc('crear_solicitud_punto', {
+      p_nombre: nombre, p_direccion: direccion, p_notas: notas, p_lat: lat, p_lng: lng,
     });
     if (error) {
       if (esErrorDeRed(error)) {
         encolar('crear', `local-${Date.now()}`, { nombre, direccion, notas, lat, lng });
-        toast('Sin señal: el punto quedó en cola local');
+        toast('Sin señal: la solicitud quedó en cola local');
       } else {
         err.textContent = error.message;
         return;
       }
     } else {
-      toast('Punto creado');
+      toast('Solicitud enviada a admin');
     }
     sheetClose('pointSheet');
     await refrescar({ ajustarMapa: false });
@@ -1541,9 +1538,10 @@ async function ejecutarOp(op) {
       return 'ok';
     }
     if (op.tipo === 'crear') {
-      const { error } = await db.rpc('guardar_punto', {
-        p_id: null, p_nombre: op.datos.nombre, p_direccion: op.datos.direccion,
-        p_estado: 'pendiente', p_notas: op.datos.notas, p_lat: op.datos.lat, p_lng: op.datos.lng,
+      // Solicitud de punto nuevo (el admin la confirma en Nueva actividad)
+      const { error } = await db.rpc('crear_solicitud_punto', {
+        p_nombre: op.datos.nombre, p_direccion: op.datos.direccion,
+        p_notas: op.datos.notas, p_lat: op.datos.lat, p_lng: op.datos.lng,
       });
       if (error) return esErrorDeRed(error) ? 'offline' : 'descartado';
       return 'ok';

@@ -23,7 +23,7 @@ beforeAll(async () => {
         return { data: 'prev', error: null };
       },
       actualizar_punto_terreno: () => ({ data: null, error: null }),
-      guardar_punto: () => ({ data: 'id', error: null }),
+      crear_solicitud_punto: () => ({ data: 'id-solicitud', error: null }),
       eliminar_punto_propio: () => ({ data: null, error: null }),
       devolver_territorio: () => ({ data: null, error: null }),
     },
