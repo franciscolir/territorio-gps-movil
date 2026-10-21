@@ -242,7 +242,12 @@ describe('aplicarEstado', () => {
 
     await app.aplicarEstado('p3', 'visitado');
     expect(app.puntoPorId('p3').estado).toBe('visitado');
-    expect(llamadas.rpc.at(-1)).toMatchObject({ nombre: 'marcar_estado', params: { p_id: 'p3', p_estado: 'visitado' } });
+    const marca = llamadas.rpc.filter((r) => r.nombre === 'marcar_estado').at(-1);
+    expect(marca.params).toMatchObject({ p_id: 'p3', p_estado: 'visitado' });
+    // el cambio de estado queda registrado como entrada del historial
+    expect(app.puntoPorId('p3').notas).toBe('Marcado como visitado');
+    const log = llamadas.rpc.filter((r) => r.nombre === 'agregar_nota_punto').at(-1);
+    expect(log.params).toMatchObject({ p_id: 'p3', p_texto: 'Marcado como visitado' });
 
     await app.aplicarEstado('p1', 'erroneo'); // error de negocio
     expect(app.puntoPorId('p1').estado).toBe('visitado'); // revierte
@@ -250,7 +255,9 @@ describe('aplicarEstado', () => {
 
     redCaida = true; // sin señal → el fetch real fallaría
     await app.aplicarEstado('p3', 'erroneo');
-    expect(app.__estado().cola.at(-1)).toMatchObject({ tipo: 'estado', clave: 'p3' });
+    const colaOffline = app.__estado().cola;
+    expect(colaOffline.at(-2)).toMatchObject({ tipo: 'estado', clave: 'p3' });
+    expect(colaOffline.at(-1)).toMatchObject({ tipo: 'nota', clave: 'p3', datos: { texto: 'Marcado como erróneo' } });
   });
 });
 
@@ -286,6 +293,44 @@ describe('guardarNotaPunto', () => {
     const ok = await app.guardarNotaPunto('p1', 'nueva nota');
     expect(ok).toBe(false);
     expect(app.__estado().cola).toHaveLength(0);
+  });
+});
+
+describe('agregarMensaje (historial del punto)', () => {
+  it('inserta por RPC, actualiza el último mensaje y limpia el input', async () => {
+    const { db, llamadas } = crearMockDb({
+      fromHandlers: fromBase(),
+      rpcHandlers: {
+        agregar_nota_punto: () => ({ data: 'n1', error: null }),
+        notas_punto: () => ({ data: [], error: null }),
+      },
+    });
+    instalarGlobales({ db });
+    const app = await cargarApp();
+    await app.entrar(USER);
+
+    document.getElementById('pointMensajeInput').value = '  hola  ';
+    await app.agregarMensaje('p3');
+
+    const rpc = llamadas.rpc.filter((r) => r.nombre === 'agregar_nota_punto').at(-1);
+    expect(rpc.params).toEqual({ p_id: 'p3', p_texto: 'hola' });
+    expect(app.puntoPorId('p3').notas).toBe('hola');
+    expect(document.getElementById('pointMensajeInput').value).toBe('');
+  });
+
+  it('sin señal → encola como tipo nota y hace append local', async () => {
+    const { db } = crearMockDb({ fromHandlers: fromBase() });
+    instalarGlobales({ db });
+    const app = await cargarApp();
+    await app.entrar(USER);
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => false });
+    document.getElementById('pointMensajeInput').value = 'sin señal';
+    await app.agregarMensaje('p3');
+
+    expect(app.__estado().cola.at(-1)).toMatchObject({ tipo: 'nota', clave: 'p3', datos: { texto: 'sin señal' } });
+    expect(document.getElementById('pointSheetHistorial').textContent).toContain('sin señal');
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => true });
   });
 });
 

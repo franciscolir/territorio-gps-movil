@@ -93,8 +93,11 @@ function nuevaOpCola(tipo, clave, datos, id, creadoEn) {
 
 // Agrega reemplazando operaciones previas del mismo tipo sobre la misma
 // clave (p. ej. dos cambios de estado del mismo punto = solo el último).
+// Las notas son apéndices: nunca se colapsan entre sí.
 function colaAgregar(ops, op) {
-  const resto = ops.filter((o) => !(o.tipo === op.tipo && o.clave === op.clave));
+  const resto = op.tipo === 'nota'
+    ? ops
+    : ops.filter((o) => !(o.tipo === op.tipo && o.clave === op.clave));
   return [...resto, op];
 }
 
@@ -104,7 +107,7 @@ function colaQuitar(ops, opId) {
 
 // Conteo por tipo para el botón "Sincronizar ahora (N pendientes)".
 function colaResumen(ops) {
-  const r = { total: ops.length, estado: 0, crear: 0, editar: 0, borrar: 0 };
+  const r = { total: ops.length, estado: 0, crear: 0, editar: 0, borrar: 0, nota: 0 };
   for (const o of ops) {
     if (Object.prototype.hasOwnProperty.call(r, o.tipo)) r[o.tipo]++;
   }

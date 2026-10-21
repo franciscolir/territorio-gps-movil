@@ -30,6 +30,7 @@ function stubMapLibre() {
     getSource() { return false; }
     remove() {}
     flyTo() {}
+    easeTo() {}
     fitBounds() {}
     resize() {}
     getStyle() { return { layers: [] }; }
@@ -62,16 +63,17 @@ export async function cargarApp() {
     return {
       cargarAsignacion, cargarPuntos, refrescar, entrar, doLogin,
       aplicarEstado, sincronizar, ejecutarOp, encolar,
-      guardarNotaPunto, guardarNotaRapida, guardarFicha,
+      guardarNotaPunto, guardarFicha,
       territorioCompleto, avisarSiCompleto, abrirRevision, pintarRevision,
       enviarTerritorio, pintarTodo, pintarLista, pintarTarjetaTerritorio,
       pintarFiltros, pintarVistaTerritorio, pintarTabs,
       setGpsEstado, activarGps, detenerGps,
       linkComoLlegar, abrirRuta, abrirFicha, abrirFichaNueva,
-      abrirModoNota, abrirModoEstados, elegirEstadoRapido, cerrarZona,
-      actualizarEstadoEnCard, actualizarNotasEnCard,
+      toggleEstadoCard, elegirEstadoRapido, elegirEstadoDetalle,
+      actualizarEstadoEnCard, pintarEstadosDetalle,
+      agregarMensaje, cargarHistorial, pintarHistorial, verPuntoEnMapa,
       pintarConfig, aplicarTema, alternarSatelite, irA, initMap,
-      leerCola, abrirStatusSheet, dentroDelTerritorio, puntoPorId,
+      leerCola, dentroDelTerritorio, puntoPorId,
       pasarFiltro, coordsDe, bboxDeGeometria,
       asegurarSesionVigente, esErrorDeRed, esErrorDeSesion,
       __estado: () => ({

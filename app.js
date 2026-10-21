@@ -51,15 +51,10 @@ let mapListo = false;
 let markers = {};       // id -> Marker
 let sateliteActiva = false; // vista satélite del mapa (por instancia de mapa)
 let sheetPunto = null;  // { id, lat, lng, esNuevo }
-let statusTarget = null;
 let undoInfo = null;    // { id, prev, timer }
 let confirmAction = null;
 let syncRunning = false;
 let opSeq = 0;
-
-// Modo abierto por card en la lista: id -> 'nota' | 'estados' (y borrador de nota)
-const modoCard = {};
-const borradorNota = {};
 
 // Aviso de territorio completado (modal revisar/enviar)
 let avisoTerritorioId = null; // sector_id que ya mostró el modal (no repetir)
@@ -121,7 +116,7 @@ document.querySelectorAll('[data-close]').forEach((b) => {
   b.addEventListener('click', () => sheetClose(b.dataset.close));
 });
 // Clic fuera de la hoja = cerrar
-for (const id of ['statusSheet', 'pointSheet', 'confirmSheet', 'configSheet', 'completadoSheet', 'revisionSheet']) {
+for (const id of ['pointSheet', 'confirmSheet', 'configSheet', 'completadoSheet', 'revisionSheet']) {
   $(id).addEventListener('click', (e) => { if (e.target === $(id)) sheetClose(id); });
 }
 
@@ -142,23 +137,23 @@ $('btnConfirmYes').addEventListener('click', () => {
 // ============================================================
 // GPS DEL DISPOSITIVO
 // Pide permiso al entrar: activo → punto azul en el mapa y "GPS ACTIVO"
-// en el header; denegado/sin señal → "UBICACIÓN NO DISPONIBLE".
+// en el header y el menú del mapa; denegado/sin señal → "UBICACIÓN NO DISPONIBLE".
 // ============================================================
 function setGpsEstado(estado) {
   gpsEstado = estado;
-  const dot = $('gpsDot');
-  const txt = $('headerEstado');
-  dot.classList.remove('bg-on-tertiary-container', 'bg-error', 'bg-surface-variant', 'animate-pulse');
-  if (estado === 'activo') {
-    dot.classList.add('bg-on-tertiary-container', 'animate-pulse');
-    txt.textContent = 'GPS ACTIVO';
-  } else if (estado === 'pendiente') {
-    dot.classList.add('bg-surface-variant');
-    txt.textContent = 'ACTIVAR UBICACIÓN';
-  } else {
-    dot.classList.add('bg-error');
-    txt.textContent = 'UBICACIÓN NO DISPONIBLE';
-  }
+  const info = estado === 'activo'
+    ? { dot: 'bg-on-tertiary-container', txt: 'GPS ACTIVO', pulse: true }
+    : estado === 'pendiente'
+      ? { dot: 'bg-surface-variant', txt: 'ACTIVAR UBICACIÓN' }
+      : { dot: 'bg-error', txt: 'UBICACIÓN NO DISPONIBLE' };
+  [$('gpsDot'), $('mapGpsDot')].filter(Boolean).forEach((dot) => {
+    dot.classList.remove('bg-on-tertiary-container', 'bg-error', 'bg-surface-variant', 'animate-pulse');
+    dot.classList.add(info.dot);
+    if (info.pulse) dot.classList.add('animate-pulse');
+  });
+  [$('headerEstado'), $('mapGpsLabel')].filter(Boolean).forEach((txt) => {
+    txt.textContent = info.txt;
+  });
   pintarGpsConfig();
 }
 
@@ -271,7 +266,7 @@ function abrirRuta(lat, lng) {
   window.open(url, '_blank', 'noopener');
 }
 
-$('btnConfig').addEventListener('click', () => { pintarConfig(); sheetOpen('configSheet'); });
+function abrirConfig() { pintarConfig(); sheetOpen('configSheet'); }
 $('temaClaroBtn').addEventListener('click', () => aplicarTema('claro'));
 $('temaOscuroBtn').addEventListener('click', () => aplicarTema('oscuro'));
 document.querySelectorAll('[data-app]').forEach((b) => {
@@ -289,7 +284,89 @@ $('btnCentrar').addEventListener('click', () => {
   map.flyTo({ center: [gpsUltima.lng, gpsUltima.lat], zoom: Math.max(map.getZoom(), 16), duration: 400 });
 });
 $('btnSatelite').addEventListener('click', alternarSatelite);
+$('btnVolverTerritorio').addEventListener('click', () => {
+  if (!territorio) { toast('No hay territorio asignado', { error: true }); return; }
+  if (!map || !mapListo) return;
+  ajustarVistaMapa();
+});
 setGpsEstado('pendiente');
+
+let controlesMapaAbiertos = true;
+
+function setControlesMapa(abiertos) {
+  controlesMapaAbiertos = abiertos;
+  const controles = $('mapControles');
+  if (controles) controles.style.display = abiertos ? 'flex' : 'none';
+  const btn = $('btnColapsarControles');
+  if (!btn) return;
+  btn.setAttribute('aria-expanded', String(abiertos));
+  btn.setAttribute('aria-label', abiertos ? 'Ocultar controles del mapa' : 'Mostrar controles del mapa');
+  btn.setAttribute('title', abiertos ? 'Ocultar controles del mapa' : 'Mostrar controles del mapa');
+  const icon = btn.querySelector('.material-symbols-outlined');
+  if (icon) icon.textContent = abiertos ? 'unfold_less' : 'unfold_more';
+}
+
+$('btnColapsarControles').addEventListener('click', () => setControlesMapa(!controlesMapaAbiertos));
+$('mapStatsToggle').addEventListener('click', () => {
+  const detalle = $('mapStatsDetalle');
+  if (!detalle) return;
+  const abierto = detalle.style.display !== 'none';
+  detalle.style.display = abierto ? 'none' : 'flex';
+  $('mapStatsToggle').setAttribute('aria-expanded', String(!abierto));
+});
+
+function abrirMenuMapa() {
+  const menu = $('mapMenu');
+  if (!menu) return;
+  menu.classList.add('abierto');
+  menu.setAttribute('aria-hidden', 'false');
+  $('mapMenuBtn')?.setAttribute('aria-expanded', 'true');
+}
+
+function cerrarMenuMapa() {
+  const menu = $('mapMenu');
+  if (!menu) return;
+  menu.classList.remove('abierto');
+  menu.setAttribute('aria-hidden', 'true');
+  $('mapMenuBtn')?.setAttribute('aria-expanded', 'false');
+}
+
+function abrirMenuApp() {
+  const menu = $('appMenu');
+  if (!menu) return;
+  menu.classList.add('abierto');
+  menu.setAttribute('aria-hidden', 'false');
+  $('appMenuBtn')?.setAttribute('aria-expanded', 'true');
+}
+
+function cerrarMenuApp() {
+  const menu = $('appMenu');
+  if (!menu) return;
+  menu.classList.remove('abierto');
+  menu.setAttribute('aria-hidden', 'true');
+  $('appMenuBtn')?.setAttribute('aria-expanded', 'false');
+}
+
+$('mapMenuBtn').addEventListener('click', abrirMenuMapa);
+$('mapMenuClose').addEventListener('click', cerrarMenuMapa);
+$('mapMenuBackdrop').addEventListener('click', cerrarMenuMapa);
+$('mapGpsEstado').addEventListener('click', () => { cerrarMenuMapa(); if (gpsEstado !== 'activo') activarGps(); });
+$('mapDevolver').addEventListener('click', () => { cerrarMenuMapa(); devolverTerritorio(); });
+$('mapConfig').addEventListener('click', () => { cerrarMenuMapa(); abrirConfig(); });
+$('mapLogout').addEventListener('click', () => { cerrarMenuMapa(); cerrarSesion(); });
+
+$('appMenuBtn').addEventListener('click', abrirMenuApp);
+$('appMenuClose').addEventListener('click', cerrarMenuApp);
+$('appMenuBackdrop').addEventListener('click', cerrarMenuApp);
+$('appMenuDevolver').addEventListener('click', () => { cerrarMenuApp(); devolverTerritorio(); });
+$('appMenuConfig').addEventListener('click', () => { cerrarMenuApp(); abrirConfig(); });
+$('appMenuLogout').addEventListener('click', () => { cerrarMenuApp(); cerrarSesion(); });
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  cerrarMenuMapa();
+  cerrarMenuApp();
+});
 
 // ============================================================
 // AUTH
@@ -306,15 +383,17 @@ async function doLogin() {
   await entrar(data.user);
 }
 
-$('btnLogout').addEventListener('click', async () => {
+async function cerrarSesion() {
   await db.auth.signOut();
   user = null; territorio = null; puntos = [];
   detenerGps();
+  cerrarMenuApp();
+  cerrarMenuMapa();
   $('appView').classList.add('hidden');
   $('emptyView').classList.add('hidden');
   $('emptyView').classList.remove('flex');
   $('loginView').classList.remove('hidden');
-});
+}
 
 // Eventos de auth: con la opción accessToken el cliente principal NO permite
 // onAuthStateChange (lanza en supabase-js ≥ 2.83). Se usa un cliente de
@@ -335,7 +414,7 @@ async function entrar(u) {
   user = u;
   $('loginView').classList.add('hidden');
   $('appView').classList.remove('hidden');
-  $('userEmail').textContent = u.email || '';
+  $('appMenuUser').textContent = u.email || '';
   cola = leerCola();
   await refrescar({ ajustarMapa: true });
   pintarTodo();
@@ -455,6 +534,7 @@ function encolar(tipo, clave, datos) {
 // ============================================================
 function pintarTodo() {
   pintarVistaTerritorio();
+  pintarHeader();
   pintarCola();
   pintarLista();
   pintarTarjetaTerritorio();
@@ -462,44 +542,29 @@ function pintarTodo() {
   if (mapListo) actualizarCapaPuntos();
 }
 
+function pintarHeader() {
+  const t = territorio?.territorios;
+  $('headerTitulo').textContent = t
+    ? [t.comuna, t.nombre].filter(Boolean).join(' · ')
+    : 'Sin territorio';
+}
+
 // ============================================================
-// ZONA DE BOTONES DE LA CARD: modos nota / estados con transición
-// Los elementos colapsan (flex-basis → 0) y se expanden: se ven
-// deslizarse y volver, nunca aparecer de golpe.
+// CARD DE PUNTO: estados, mensajes e historial
 // ============================================================
-function abrirModoNota(zona, id) {
-  modoCard[id] = 'nota';
-  if (!(id in borradorNota)) borradorNota[id] = puntoPorId(id)?.notas || '';
-  zona.querySelector('.acc-nav')?.classList.add('oculto');
-  zona.querySelector('.acc-estado')?.classList.add('oculto');
-  zona.querySelector('.acc-input')?.classList.add('abierta');
-  zona.querySelector('.acc-nota')?.classList.add('modo-guardar');
-  const inp = zona.querySelector('[data-nota-input]');
-  inp.value = borradorNota[id] ?? '';
-  setTimeout(() => inp.focus(), 340);
+// Abre/cierra la fila de estados de una card (solo una desplegada a la vez)
+function toggleEstadoCard(art, id) {
+  const abierto = art.dataset.estadoAbierto === '1';
+  document.querySelectorAll('#pdvList article[data-estado-abierto="1"]').forEach((a) => {
+    a.dataset.estadoAbierto = '0';
+    a.querySelector('[data-estados-row]')?.classList.add('hidden');
+  });
+  if (abierto) return;
+  art.dataset.estadoAbierto = '1';
+  art.querySelector('[data-estados-row]')?.classList.remove('hidden');
 }
 
-function abrirModoEstados(zona, id) {
-  modoCard[id] = 'estados';
-  zona.querySelector('.acc-nav')?.classList.add('oculto');
-  zona.querySelector('.acc-input')?.classList.remove('abierta');
-  zona.querySelector('.acc-nota')?.classList.remove('modo-guardar');
-  zona.querySelector('.acc-nota')?.classList.add('oculto');
-  zona.querySelector('.acc-estado')?.classList.add('oculto');
-  zona.querySelector('.estados-wrap')?.classList.add('abierta');
-}
-
-// Todo vuelve a su sitio deslizándose
-function cerrarZona(zona, id) {
-  delete modoCard[id];
-  zona.querySelector('.acc-nav')?.classList.remove('oculto');
-  zona.querySelector('.acc-input')?.classList.remove('abierta');
-  zona.querySelector('.acc-nota')?.classList.remove('modo-guardar', 'oculto');
-  zona.querySelector('.acc-estado')?.classList.remove('oculto');
-  zona.querySelector('.estados-wrap')?.classList.remove('abierta');
-}
-
-// Guarda la nota de un punto (RPC; sin señal → cola). true = quedó guardada o en cola
+// Guarda la nota espejo (último mensaje) de un punto. true = ok o en cola
 async function guardarNotaPunto(id, texto) {
   const p = puntoPorId(id);
   if (!p) return false;
@@ -524,48 +589,200 @@ async function guardarNotaPunto(id, texto) {
   return true;
 }
 
-async function guardarNotaRapida(zona, id) {
-  const ok = await guardarNotaPunto(id, borradorNota[id]);
-  if (!ok) return;
-  actualizarNotasEnCard(zona, puntoPorId(id)?.notas || '');
-  delete borradorNota[id];
-  cerrarZona(zona, id);
+// Agrega un mensaje al historial (RPC; sin señal → cola con append local)
+async function agregarMensaje(id) {
+  const inp = $('pointMensajeInput');
+  const texto = (inp.value || '').trim();
+  const p = puntoPorId(id);
+  if (!p || !texto) return;
+  const btn = $('btnPointMensaje');
+  btn.disabled = true;
+  const { error } = await db.rpc('agregar_nota_punto', { p_id: id, p_texto: texto });
+  btn.disabled = false;
+  if (error && !esErrorDeRed(error)) { toast(error.message, { error: true }); return; }
+  if (error) {
+    encolar('nota', id, { texto });
+    p.notas = texto;
+    anexarMensajeLocal(texto, true);
+    inp.value = '';
+    pintarLista();
+    return;
+  }
+  p.notas = texto;
+  inp.value = '';
+  pintarLista();
+  await cargarHistorial(id);
 }
 
-function actualizarNotasEnCard(zona, nota) {
-  const art = zona.closest('article');
-  if (!art) return;
-  const bloque = art.querySelector('[data-notas]');
-  if (nota) {
-    const html = `<div data-notas class="bg-surface-container-low p-2 rounded-lg flex items-center gap-2">
-      <span class="material-symbols-outlined text-secondary text-[18px] shrink-0">info</span>
-      <p class="text-xs text-on-surface-variant italic truncate">"${escapeHtml(nota)}"</p>
+function anexarMensajeLocal(texto, pendiente) {
+  const box = $('pointSheetHistorial');
+  box.querySelector('[data-hist-vacio]')?.remove();
+  const div = document.createElement('div');
+  div.className = 'relative pl-4';
+  div.innerHTML = `
+    <span class="absolute -left-[7px] top-2 w-3 h-3 rounded-full bg-secondary ring-4 ring-surface-container-lowest"></span>
+    <div class="bg-surface-container rounded-xl p-2.5">
+      <div class="flex items-center justify-between gap-2 mb-0.5">
+        <span class="text-[11px] font-bold text-on-surface truncate">${pendiente ? 'Tú · sin sincronizar' : 'Tú'}</span>
+        <span class="text-[10px] text-on-surface-variant shrink-0">${escapeHtml(fechaCorta(new Date().toISOString()))}</span>
+      </div>
+      <p class="text-xs text-on-surface-variant whitespace-pre-wrap break-words">${escapeHtml(texto)}</p>
     </div>`;
-    if (bloque) bloque.outerHTML = html;
-    else art.querySelector('[data-coords]')?.insertAdjacentHTML('afterend', html);
-  } else {
-    bloque?.remove();
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function fechaCorta(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }) + ' ' +
+         d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function cargarHistorial(id) {
+  const box = $('pointSheetHistorial');
+  box.innerHTML = '<p class="text-xs text-on-surface-variant">Cargando historial…</p>';
+  const { data, error } = await db.rpc('notas_punto', { p_punto: id });
+  if (error) {
+    box.innerHTML = `<p class="text-xs text-error">${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  pintarHistorial(data || []);
+}
+
+function pintarHistorial(items) {
+  const box = $('pointSheetHistorial');
+  const count = $('pointSheetHistorialCount');
+  if (count) count.textContent = items.length ? `${items.length} registro${items.length === 1 ? '' : 's'}` : '';
+  if (!items.length) {
+    box.innerHTML = '<p data-hist-vacio class="text-xs text-on-surface-variant">Sin mensajes todavía.</p>';
+    return;
+  }
+  const ultimo = items[items.length - 1];
+  const meta = $('pointSheetNotaMeta');
+  if (meta) meta.textContent = ultimo.autor ? `${ultimo.autor} · ${fechaCorta(ultimo.at)}` : fechaCorta(ultimo.at);
+  box.innerHTML = `<div class="border-l-2 border-outline-variant ml-1.5 flex flex-col gap-2">${items.map((n) => `
+    <div class="relative pl-4">
+      <span class="absolute -left-[7px] top-2 w-3 h-3 rounded-full bg-secondary ring-4 ring-surface-container-lowest"></span>
+      <div class="bg-surface-container rounded-xl p-2.5">
+        <div class="flex items-center justify-between gap-2 mb-0.5">
+          <span class="text-[11px] font-bold text-on-surface truncate">${escapeHtml(n.autor || '—')}</span>
+          <span class="text-[10px] text-on-surface-variant shrink-0">${escapeHtml(fechaCorta(n.at))}</span>
+        </div>
+        <p class="text-xs text-on-surface-variant whitespace-pre-wrap break-words">${escapeHtml(n.texto)}</p>
+      </div>
+    </div>`).join('')}</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+// Tarjetas grandes del selector de estado (detalle del punto)
+const SUBTITULOS_ESTADO = {
+  pendiente: 'Por visitar hoy',
+  visitado: 'Completada con éxito',
+  erroneo: 'Datos incorrectos',
+  no_pasar: 'Cancelado / cerrado',
+};
+const CLASES_ESTADO_IC = {
+  pendiente: 'bg-secondary-container text-on-secondary-container',
+  visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
+  erroneo: 'bg-outline text-white',
+  no_pasar: 'bg-error text-on-error',
+};
+const BORDES_ESTADO_DETALLE = {
+  pendiente: 'border-secondary',
+  visitado: 'border-tertiary-fixed-dim',
+  erroneo: 'border-outline',
+  no_pasar: 'border-error',
+};
+const CHECK_ESTADO_DETALLE = {
+  pendiente: 'text-secondary',
+  visitado: 'text-on-tertiary-fixed',
+  erroneo: 'text-on-surface-variant',
+  no_pasar: 'text-error',
+};
+
+function pintarEstadosDetalle(id, est) {
+  const box = $('pointSheetEstados');
+  box.innerHTML = ESTADOS.map(([valor, etiqueta]) => {
+    const activo = valor === est;
+    const borde = activo
+      ? `border-2 ${BORDES_ESTADO_DETALLE[valor]} bg-surface-container-high`
+      : 'border border-outline-variant/50 bg-surface-container';
+    return `
+      <button class="est-det flex items-center gap-2.5 p-3 rounded-xl ${borde} text-on-surface text-left active:scale-[0.98] transition"
+              data-estado-detalle="${escapeHtml(id)}" data-valor="${valor}">
+        <span class="w-7 h-7 rounded-lg ${CLASES_ESTADO_IC[valor]} flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[15px]">${ICONOS_ESTADO[valor]}</span>
+        </span>
+        <span class="flex-1 min-w-0">
+          <span class="block font-bold text-xs truncate leading-tight">${etiqueta}</span>
+          <span class="block text-[10px] text-on-surface-variant font-normal truncate">${SUBTITULOS_ESTADO[valor]}</span>
+        </span>
+        ${activo ? `<span class="material-symbols-outlined text-[16px] shrink-0 ${CHECK_ESTADO_DETALLE[valor]}">check_circle</span>` : ''}
+      </button>`;
+  }).join('');
+  box.querySelectorAll('[data-estado-detalle]').forEach((b) => {
+    b.addEventListener('click', () => elegirEstadoDetalle(id, b.dataset.valor));
+  });
+}
+
+function pintarNotaCard(p) {
+  const box = $('pointSheetNotaBox');
+  if (!box) return;
+  const hay = !!(p.notas && p.notas.trim());
+  box.classList.toggle('hidden', !hay);
+  if (hay) {
+    $('pointSheetNotaTexto').textContent = p.notas;
+    $('pointSheetNotaMeta').textContent = '';
   }
 }
 
-function elegirEstadoRapido(zona, id, valor) {
-  if (!puntoPorId(id)) return;
-  // mantenerLista: evita el re-render que cortaría la animación de cierre
-  aplicarEstado(id, valor, { mantenerLista: true });
-  actualizarEstadoEnCard(zona, valor);
-  cerrarZona(zona, id);
+function pintarBadgesFicha(p, libre) {
+  $('pointSheetBadges').innerHTML = chipEstado(p.estado || 'pendiente')
+    + (p.user_id === user.id ? '<span class="text-[11px] font-bold text-secondary bg-surface-container px-2 py-1 rounded">CREADO POR TI</span>' : '')
+    + (libre ? '<span class="text-[11px] font-bold text-on-surface-variant bg-surface-container px-2 py-1 rounded">SOLO LECTURA</span>' : '');
 }
 
-function actualizarEstadoEnCard(zona, est) {
-  const art = zona.closest('article');
-  const chip = art?.querySelector('[data-chip]');
-  if (chip) chip.innerHTML = chipEstado(est);
-  zona.querySelectorAll('.est-op').forEach((b) => {
+function elegirEstadoRapido(art, id, valor) {
+  if (!puntoPorId(id)) return;
+  // mantenerLista: evita el re-render que cortaría la transición del chip
+  aplicarEstado(id, valor, { mantenerLista: true });
+  actualizarEstadoEnCard(art, valor);
+}
+
+async function elegirEstadoDetalle(id, valor) {
+  const p = puntoPorId(id);
+  if (!p) return;
+  await aplicarEstado(id, valor, { mantenerLista: true });
+  pintarEstadosDetalle(id, valor);
+  pintarBadgesFicha(p, !territorio);
+  pintarNotaCard(p);
+  if (navigator.onLine) await cargarHistorial(id); // muestra la nueva entrada del log
+}
+
+function actualizarEstadoEnCard(art, est) {
+  const chip = art?.querySelector('[data-estado-chip]');
+  if (chip) {
+    chip.className = `shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold active:opacity-80 ${CLASES_ESTADO_ACTIVO[est] || ''}`;
+    const ic = chip.querySelector('.material-symbols-outlined');
+    if (ic) ic.textContent = ICONOS_ESTADO[est] || 'schedule';
+    const tx = chip.querySelector('[data-estado-label]');
+    if (tx) tx.textContent = estadoLabel(est);
+  }
+  art?.querySelectorAll('.est-op').forEach((b) => {
     const activo = b.dataset.valor === est;
-    b.className = `est-op min-w-0 flex-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 active:opacity-80 ${
+    b.className = `est-op h-9 rounded-lg text-[10px] font-semibold flex items-center justify-center gap-1 active:opacity-80 ${
       activo ? CLASES_ESTADO_ACTIVO[b.dataset.valor] : 'bg-surface-container text-on-surface-variant'
     }`;
   });
+}
+
+function actualizarChromeTerritorio() {
+  if (!territorio) { $('secTerritorio').classList.add('hidden'); return; }
+  const total = territorioAvance(puntos).total + colaResumen(cola).crear;
+  const sinTareas = tabActual === 'tareas' && !tareas.length;
+  $('secTerritorio').classList.toggle('hidden', !total || sinTareas);
 }
 
 function pintarVistaTerritorio() {
@@ -580,12 +797,10 @@ function pintarVistaTerritorio() {
   err.textContent = errorTerritorio ? 'Detalle: ' + errorTerritorio : '';
   err.classList.toggle('hidden', !errorTerritorio);
   // Elementos exclusivos de un territorio asignado
-  $('secTerritorio').classList.toggle('hidden', libre);
-  $('btnNavegar').classList.toggle('hidden', libre);
-  const hint = $('mapHint');
-  if (hint) hint.textContent = libre
-    ? 'Toca el mapa para solicitar un punto nuevo — admin lo confirmará'
-    : 'Toca el mapa para solicitar un punto nuevo en tu territorio — admin lo confirmará';
+  actualizarChromeTerritorio();
+  $('mapDevolver')?.classList.toggle('hidden', libre);
+  $('mapStats')?.classList.toggle('hidden', libre);
+  $('btnVolverTerritorio')?.classList.toggle('hidden', libre);
 }
 
 function pintarCola() {
@@ -594,13 +809,6 @@ function pintarCola() {
 
   $('headerSyncIcon').textContent = r.total ? 'cloud_off' : (off ? 'cloud_off' : 'cloud_done');
   $('headerSyncCount').textContent = r.total ? String(r.total) : '';
-
-  $('stripIcon').textContent = off ? 'cloud_off' : 'cloud_sync';
-  $('stripTitulo').textContent = off ? 'Modo offline activo' : 'Conectado';
-  $('stripTexto').textContent = r.total
-    ? `${r.total} gestión${r.total === 1 ? '' : 'es'} en cola local`
-    : (off ? 'Sin señal: los cambios se guardan en el teléfono' : 'Sincronizado con central');
-  $('stripComuna').textContent = territorio?.territorios?.comuna || '—';
 
   $('fabSync').classList.toggle('hidden', !r.total);
   $('fabCount').textContent = String(r.total);
@@ -631,42 +839,55 @@ function textoOp(tipo) {
 function pintarTarjetaTerritorio() {
   if (!territorio) return; // modo libre: la tarjeta está oculta
   const av = territorioAvance(puntos);
-  const pa = procesoAvance(puntos, territorio.puntos_base);
   const extra = colaResumen(cola).crear;
-  $('territorioNombre').textContent = territorio.territorios.nombre || '—';
-  // Avance del proceso: base = pendientes al asignar (migración 019)
+  const total = av.total + extra;
+  const pct = total ? Math.round((av.visitado / total) * 100) : 0;
+  // Progreso de la ruta: barra lineal simple sobre las paradas visitadas.
   const boxAv = $('avanceProcesoBox');
   if (boxAv) {
-    boxAv.classList.toggle('hidden', !pa.base);
-    $('avanceProcesoPct').textContent = pa.pct + ' %';
-    $('avanceProcesoBar').style.width = pa.pct + '%';
-    $('avanceProcesoDetalle').textContent =
-      `${pa.gest} de ${pa.base} puntos pendientes al asignar gestionados · quedan ${pa.pend}`;
+    boxAv.classList.toggle('hidden', !total);
+    $('avanceProcesoPct').textContent = pct + ' %';
+    const det = $('avanceProcesoDetalle');
+    if (det) det.textContent = `${av.visitado} de ${total} paradas visitadas`;
+    const bar = $('barProgreso');
+    if (bar) bar.style.width = pct + '%';
   }
-  $('territorioProgreso').textContent = `${av.visitado} de ${av.total} visitados (${av.pct}%)`;
-  const pct = (n) => (av.total ? (n / av.total) * 100 : 0) + '%';
-  $('barVisitado').style.width = pct(av.visitado);
-  $('barErroneo').style.width = pct(av.erroneo);
-  $('barNoPasar').style.width = pct(av.no_pasar);
-  $('cntVisitado').textContent = av.visitado;
-  $('cntErroneo').textContent = av.erroneo;
-  $('cntNoPasar').textContent = av.no_pasar;
-  $('cntPendiente').textContent = av.pendiente + extra;
+  const pa = procesoAvance(puntos, territorio.puntos_base);
+  const stats = $('mapStats');
+  if (stats) {
+    stats.classList.toggle('hidden', !pa.base);
+    $('mapStatsToggle').textContent = pa.pct + '%';
+    $('mapStatsErroneo').textContent = av.erroneo;
+    $('mapStatsNoPasar').textContent = av.no_pasar;
+    $('mapStatsPendiente').textContent = av.pendiente + extra;
+  }
 }
+
+const CLASES_FILTRO_ACTIVO = {
+  todos: 'bg-primary text-on-primary border-transparent',
+  pendiente: 'bg-secondary-container text-on-secondary-container border-transparent',
+  no_pasar: 'bg-error-container text-on-error-container border-transparent',
+  completado: 'bg-tertiary-fixed text-on-tertiary-fixed border-transparent',
+};
 
 function pintarFiltros() {
   const av = territorioAvance(puntos);
   const extra = colaResumen(cola).crear;
-  const val = { todos: av.total + extra, visitado: av.visitado, incidencia: av.erroneo + av.no_pasar, pendiente: av.pendiente + extra };
+  const val = {
+    todos: av.total + extra,
+    pendiente: av.pendiente + extra,
+    no_pasar: av.no_pasar,
+    completado: av.visitado + av.erroneo,
+  };
   document.querySelectorAll('[data-badge]').forEach((b) => {
     b.textContent = String(val[b.dataset.badge] ?? 0);
   });
   document.querySelectorAll('.filtro').forEach((b) => {
     const activo = b.dataset.filtro === filtroActual;
-    b.classList.toggle('bg-primary', activo);
-    b.classList.toggle('text-on-primary', activo);
-    b.classList.toggle('bg-surface-container-lowest', !activo);
-    b.classList.toggle('text-on-surface-variant', !activo);
+    const estado = activo
+      ? CLASES_FILTRO_ACTIVO[b.dataset.filtro]
+      : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant';
+    b.className = `filtro shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border active:scale-95 transition-all ${estado}`;
   });
 }
 
@@ -676,8 +897,21 @@ document.querySelectorAll('.filtro').forEach((b) => {
 
 function pasarFiltro(p) {
   if (filtroActual === 'todos') return true;
-  if (filtroActual === 'incidencia') return p.estado === 'erroneo' || p.estado === 'no_pasar';
-  return p.estado === filtroActual;
+  if (filtroActual === 'completado') return p.estado === 'visitado' || p.estado === 'erroneo';
+  if (filtroActual === 'no_pasar') return p.estado === 'no_pasar';
+  return p.estado === filtroActual; // pendiente
+}
+
+// Píldora de la nota más reciente (último mensaje del historial)
+function notaPill(texto) {
+  return `<div class="bg-surface-container rounded-xl p-2 border border-outline-variant/40 flex items-start gap-2">
+    <span class="material-symbols-outlined text-on-surface-variant text-[15px]">comment</span>
+    <p class="text-xs text-on-surface-variant italic break-words">“${escapeHtml(texto)}”</p>
+  </div>`;
+}
+
+function acentoEstado(est) {
+  return (est === 'no_pasar' || est === 'erroneo') ? 'border-error/40' : 'border-outline-variant/40';
 }
 
 function pintarLista() {
@@ -699,21 +933,41 @@ function pintarLista() {
   // aquí no se ofrecen acciones de trabajo.
   if (!territorio) {
     box.innerHTML = todo.map((p) => {
+      const est = p.estado || 'pendiente';
       const coords = coordsDe(p);
       const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : null;
       return `
-      <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-2">
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex flex-col min-w-0">
-            <span class="text-[11px] font-bold text-on-surface-variant">PDV</span>
-            <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
-            <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || 'Sin dirección')}</p>
+      <article class="bg-surface-container-lowest rounded-2xl p-3 shadow-sm border ${acentoEstado(est)} flex flex-col gap-2" data-id="${escapeHtml(p.id)}">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1 cursor-pointer" data-abrir="${escapeHtml(p.id)}">
+            <h3 class="text-base font-bold text-on-surface truncate leading-snug">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+            <div class="flex items-center gap-1.5 mt-1 text-xs text-on-surface-variant min-w-0">
+              <span class="material-symbols-outlined text-[14px] shrink-0">location_on</span>
+              <span class="font-medium truncate">${escapeHtml(p.direccion || 'Sin dirección')}</span>
+            </div>
           </div>
-          <span data-chip>${chipEstado(p.estado || 'pendiente')}</span>
+          ${chipEstado(est)}
         </div>
-        ${nav ? `<a class="text-xs text-secondary font-semibold flex items-center gap-1" href="${nav}" target="_blank" rel="noopener"><span class="material-symbols-outlined text-[16px]">near_me</span>Cómo llegar</a>` : ''}
+        ${p.notas ? notaPill(p.notas) : ''}
+        <div class="grid grid-cols-3 gap-2 pt-2 border-t border-outline-variant/40">
+          <button data-abrir="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-primary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
+            <span class="material-symbols-outlined text-[16px]">visibility</span>Ver
+          </button>
+          <a ${nav ? `href="${nav}" target="_blank" rel="noopener"` : ''} class="min-h-[40px] rounded-xl bg-secondary text-on-secondary text-xs font-semibold flex items-center justify-center gap-1 active:opacity-90 ${nav ? '' : 'opacity-40 pointer-events-none'}">
+            <span class="material-symbols-outlined text-[16px]">directions</span>Cómo llegar
+          </a>
+          <button data-ver-mapa="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-secondary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
+            <span class="material-symbols-outlined text-[16px]">map</span>En mapa
+          </button>
+        </div>
       </article>`;
     }).join('');
+    box.querySelectorAll('[data-abrir]').forEach((el) => {
+      el.addEventListener('click', () => abrirFicha(el.dataset.abrir));
+    });
+    box.querySelectorAll('[data-ver-mapa]').forEach((b) => {
+      b.addEventListener('click', () => verPuntoEnMapa(b.dataset.verMapa));
+    });
     return;
   }
 
@@ -722,67 +976,47 @@ function pintarLista() {
     const coords = coordsDe(p);
     const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
     const local = !!p.local;
-    const enNota = modoCard[p.id] === 'nota';
-    const enEstados = modoCard[p.id] === 'estados';
-    const clsNav = enNota || enEstados ? 'oculto' : '';
-    const clsInput = enNota ? 'abierta' : '';
-    const clsNota = enNota ? 'modo-guardar' : (enEstados ? 'oculto' : '');
-    const clsEstado = enNota || enEstados ? 'oculto' : '';
-    const clsEstados = enEstados ? 'abierta' : '';
-    const borrador = enNota ? (borradorNota[p.id] ?? p.notas ?? '') : (p.notas ?? '');
     const opcionesEstado = ESTADOS.map(([valor, etiqueta]) => {
       const activo = valor === est;
       const cls = activo ? CLASES_ESTADO_ACTIVO[valor] : 'bg-surface-container text-on-surface-variant';
       return `
-        <button class="est-op min-w-0 flex-1 rounded-lg ${cls} text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 active:opacity-80"
-                data-estado-rapido="${escapeHtml(p.id)}" data-valor="${valor}"
-                ${local ? 'disabled' : ''}>
-          <span class="material-symbols-outlined text-[18px]">${ICONOS_ESTADO[valor]}</span>
-          <span>${etiqueta}</span>
+        <button class="est-op h-9 rounded-lg ${cls} text-[10px] font-semibold flex items-center justify-center gap-1 active:opacity-80"
+                data-estado-rapido="${escapeHtml(p.id)}" data-valor="${valor}" ${local ? 'disabled' : ''}>
+          <span class="material-symbols-outlined text-[16px]">${ICONOS_ESTADO[valor]}</span>
+          <span class="truncate">${etiqueta}</span>
         </button>`;
     }).join('');
     return `
-    <article class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col gap-3" data-id="${escapeHtml(p.id)}">
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex flex-col min-w-0 cursor-pointer" data-abrir="${escapeHtml(p.id)}">
-          <span class="text-[11px] font-bold text-on-surface-variant">${local ? 'SOLICITUD · PENDIENTE SYNC' : 'PDV'}</span>
-          <h3 class="text-base font-bold text-on-surface truncate leading-tight">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
-          <p class="text-sm text-on-surface-variant truncate">${escapeHtml(p.direccion || 'Sin dirección')}</p>
+    <article class="bg-surface-container-lowest rounded-2xl p-3 shadow-sm border ${acentoEstado(est)} flex flex-col gap-2" data-id="${escapeHtml(p.id)}" data-estado-abierto="0">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1 cursor-pointer" data-abrir="${escapeHtml(p.id)}">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <h3 class="text-base font-bold text-on-surface truncate leading-snug">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+            ${local ? '<span class="material-symbols-outlined text-secondary text-[16px] shrink-0" title="Pendiente de sincronizar">cloud_upload</span>' : ''}
+          </div>
+          <div class="flex items-center gap-1.5 mt-1 text-xs text-on-surface-variant min-w-0">
+            <span class="material-symbols-outlined text-[14px] shrink-0">location_on</span>
+            <span class="font-medium truncate">${escapeHtml(p.direccion || 'Sin dirección')}</span>
+          </div>
         </div>
-        <span data-chip>${chipEstado(est)}</span>
+        <button data-estado-chip="${escapeHtml(p.id)}" ${local ? 'disabled' : ''}
+                class="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold active:opacity-80 ${CLASES_ESTADO_ACTIVO[est] || ''}">
+          <span class="material-symbols-outlined text-[14px]">${ICONOS_ESTADO[est] || 'schedule'}</span>
+          <span data-estado-label>${estadoLabel(est)}</span>
+        </button>
       </div>
-      ${coords ? `
-      <div data-coords class="flex items-center gap-1 text-xs text-on-surface-variant">
-        <span class="material-symbols-outlined text-[14px]">location_on</span>
-        <span>${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}</span>
-      </div>` : ''}
-      ${p.notas ? `
-      <div data-notas class="bg-surface-container-low p-2 rounded-lg flex items-center gap-2">
-        <span class="material-symbols-outlined text-secondary text-[18px] shrink-0">info</span>
-        <p class="text-xs text-on-surface-variant italic truncate">"${escapeHtml(p.notas)}"</p>
-      </div>` : ''}
-      <div class="zona-btns">
-        <a class="acc acc-nav ${clsNav} bg-surface-container active:bg-surface-container-high"
-           href="${nav}" target="_blank" rel="noopener" title="Cómo llegar" aria-label="Cómo llegar">
-          <span class="material-symbols-outlined text-primary text-[20px]">near_me</span>
+      <div class="hidden grid grid-cols-4 gap-1" data-estados-row>${opcionesEstado}</div>
+      ${p.notas ? notaPill(p.notas) : ''}
+      <div class="grid grid-cols-3 gap-2 pt-2 border-t border-outline-variant/40">
+        <button data-abrir="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-primary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
+          <span class="material-symbols-outlined text-[16px]">visibility</span>Ver
+        </button>
+        <a href="${nav}" target="_blank" rel="noopener" aria-label="Cómo llegar" class="min-h-[40px] rounded-xl bg-secondary text-on-secondary text-xs font-semibold flex items-center justify-center gap-1 active:opacity-90">
+          <span class="material-symbols-outlined text-[16px]">directions</span>Cómo llegar
         </a>
-        <div class="acc-zona acc-input ${clsInput}">
-          <input data-nota-input="${escapeHtml(p.id)}"
-                 class="w-full h-full min-w-0 px-3 rounded-lg bg-surface-container text-on-surface text-sm outline-none border border-outline-variant focus:border-secondary"
-                 placeholder="Agregar nota…" value="${escapeHtml(borrador)}" />
-        </div>
-        <button class="acc acc-nota ${clsNota} bg-surface-container active:bg-surface-container-high"
-                data-nota-btn="${escapeHtml(p.id)}" title="Nota" aria-label="Nota"
-                ${local ? 'disabled' : ''}>
-          <span class="ic ic-pencil material-symbols-outlined text-primary text-[20px]">edit</span>
-          <span class="ic ic-flecha material-symbols-outlined text-primary text-[20px]">arrow_forward</span>
+        <button data-ver-mapa="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-secondary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
+          <span class="material-symbols-outlined text-[16px]">map</span>En mapa
         </button>
-        <button class="acc acc-estado ${clsEstado} bg-surface-container active:bg-surface-container-high"
-                data-estado-btn="${escapeHtml(p.id)}" title="Estado" aria-label="Cambiar estado"
-                ${local ? 'disabled' : ''}>
-          <span class="material-symbols-outlined text-primary text-[20px]">flag</span>
-        </button>
-        <div class="acc-zona estados-wrap ${clsEstados}">${opcionesEstado}</div>
       </div>
     </article>`;
   }).join('');
@@ -790,32 +1024,34 @@ function pintarLista() {
   box.querySelectorAll('[data-abrir]').forEach((el) => {
     el.addEventListener('click', () => abrirFicha(el.dataset.abrir));
   });
-  box.querySelectorAll('[data-nota-btn]').forEach((b) => {
+  box.querySelectorAll('[data-estado-chip]').forEach((b) => {
     b.addEventListener('click', () => {
-      const zona = b.closest('.zona-btns');
-      const id = b.dataset.notaBtn;
-      if (modoCard[id] === 'nota') guardarNotaRapida(zona, id);
-      else abrirModoNota(zona, id);
+      if (b.disabled) return;
+      toggleEstadoCard(b.closest('article'), b.dataset.estadoChip);
     });
-  });
-  box.querySelectorAll('[data-nota-input]').forEach((inp) => {
-    inp.addEventListener('input', () => { borradorNota[inp.dataset.notaInput] = inp.value; });
-    inp.addEventListener('keydown', (e) => {
-      const zona = inp.closest('.zona-btns');
-      if (e.key === 'Enter') { e.preventDefault(); guardarNotaRapida(zona, inp.dataset.notaInput); }
-      if (e.key === 'Escape') { delete borradorNota[inp.dataset.notaInput]; cerrarZona(zona, inp.dataset.notaInput); }
-    });
-  });
-  box.querySelectorAll('[data-estado-btn]').forEach((b) => {
-    b.addEventListener('click', () => abrirModoEstados(b.closest('.zona-btns'), b.dataset.estadoBtn));
   });
   box.querySelectorAll('[data-estado-rapido]').forEach((b) => {
-    b.addEventListener('click', () => elegirEstadoRapido(b.closest('.zona-btns'), b.dataset.estadoRapido, b.dataset.valor));
+    b.addEventListener('click', () => {
+      const art = b.closest('article');
+      elegirEstadoRapido(art, b.dataset.estadoRapido, b.dataset.valor);
+      toggleEstadoCard(art, b.dataset.estadoRapido);
+    });
+  });
+  box.querySelectorAll('[data-ver-mapa]').forEach((b) => {
+    b.addEventListener('click', () => verPuntoEnMapa(b.dataset.verMapa));
   });
 }
 
+// Lleva al mapa y encuadra el punto indicado
+function verPuntoEnMapa(id) {
+  const p = puntoPorId(id);
+  const c = p && coordsDe(p);
+  irA('mapa');
+  if (c) setTimeout(() => encuadrarCoords([[c.lng, c.lat]]), 60);
+}
+
 // Iconos y clases de los botones de estado rápido de la card
-const ICONOS_ESTADO = { pendiente: 'schedule', visitado: 'check_circle', erroneo: 'cancel', no_pasar: 'block' };
+const ICONOS_ESTADO = { pendiente: 'schedule', visitado: 'check_circle', erroneo: 'report', no_pasar: 'block' };
 const CLASES_ESTADO_ACTIVO = {
   pendiente: 'bg-surface-container-high text-secondary',
   visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
@@ -826,13 +1062,13 @@ const CLASES_ESTADO_ACTIVO = {
 function chipEstado(est) {
   const mapa = {
     visitado: ['bg-tertiary-fixed text-on-tertiary-fixed', 'check_circle', 'Visitado'],
-    erroneo: ['bg-surface-container-highest text-on-surface-variant', 'cancel', 'Erróneo'],
+    erroneo: ['bg-surface-container-highest text-on-surface-variant', 'report', 'Erróneo'],
     no_pasar: ['bg-error-container text-on-error-container', 'block', 'No pasar'],
     pendiente: ['bg-surface-container-high text-secondary', 'schedule', 'Pendiente'],
   };
   const [cls, ic, txt] = mapa[est] || mapa.pendiente;
-  return `<span class="inline-flex items-center gap-1 px-3 py-1 rounded ${cls} text-xs font-semibold shrink-0">
-    <span class="material-symbols-outlined text-[16px]">${ic}</span><span>${txt}</span></span>`;
+  return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full ${cls} text-xs font-semibold shrink-0">
+    <span class="material-symbols-outlined text-[15px]">${ic}</span><span>${txt}</span></span>`;
 }
 
 // ============================================================
@@ -1008,13 +1244,6 @@ function actualizarCapaPuntos() {
     if (!p || idsTarea.has(t.punto_id) && puntos.some((x) => x.id === t.punto_id)) return;
     pintar(p, { tarea: true });
   });
-
-  const av = territorioAvance(puntos);
-  $('mapLegend').innerHTML = `
-    <span class="text-on-tertiary">${av.visitado} visitados</span>
-    <span class="text-on-surface-variant">${av.erroneo} erróneos</span>
-    <span class="text-error">${av.no_pasar} no pasar</span>
-    <span class="text-secondary">${av.pendiente} pendientes</span>`;
 }
 
 // ============================================================
@@ -1027,37 +1256,41 @@ function puntoPorId(id) {
 function abrirFicha(id) {
   const p = puntoPorId(id);
   if (!p) {
-    toast('Este punto está en cola local; sincroniza para editarlo', { error: false });
+    toast('Este punto está en cola local; sincroniza para verlo', { error: false });
     return;
   }
   const c = coordsDe(p) || {};
+  const coords = coordsDe(p);
+  const libre = !territorio;
   sheetPunto = { id: p.id, lat: c.lat ?? '', lng: c.lng ?? '', esNuevo: false };
 
   $('pointSheetKicker').textContent = 'Detalle del punto';
   $('pointSheetTitle').textContent = p.nombre || 'Punto';
   $('pointSheetError').textContent = '';
+  $('pointSheetDireccion').textContent = p.direccion || 'Sin dirección';
+  $('pointSheetCoords').textContent = coords
+    ? `${Number(coords.lat).toFixed(5)}, ${Number(coords.lng).toFixed(5)}`
+    : 'Sin coordenadas';
   $('fPDVNombre').value = p.nombre || '';
   $('fPDVDireccion').value = p.direccion || '';
-  $('fPDVNotas').value = p.notas || '';
   $('fPDVLat').value = c.lat != null ? Number(c.lat).toFixed(6) : '';
   $('fPDVLng').value = c.lng != null ? Number(c.lng).toFixed(6) : '';
-  $('pointSheetBadges').innerHTML = chipEstado(p.estado || 'pendiente')
-    + (p.user_id === user.id ? '<span class="text-[11px] font-bold text-secondary bg-surface-container px-2 py-1 rounded">CREADO POR TI</span>' : '');
+  pintarBadgesFicha(p, libre);
+  pintarNotaCard(p);
 
-  const coords = coordsDe(p);
-  $('btnPointNav').href = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
   $('btnPointNav').classList.toggle('hidden', !coords);
-  // Modo libre (sin asignación): la ficha es solo lectura — los cambios de
-  // estado/edición los valida la DB contra el territorio activo del usuario.
-  const libre = !territorio;
-  $('btnPointStatus').classList.toggle('hidden', libre);
+  $('btnPointMap').classList.toggle('col-span-2', !coords);
+  $('btnPointEdit').classList.toggle('hidden', libre);
   $('btnPointDelete').classList.toggle('hidden', libre || p.user_id !== user.id);
-  const btnSave = document.getElementById('btnPointSave');
-  if (btnSave) btnSave.classList.toggle('hidden', libre);
-  if (libre) {
-    $('pointSheetBadges').innerHTML += '<span class="text-[11px] font-bold text-on-surface-variant bg-surface-container px-2 py-1 rounded">SOLO LECTURA</span>';
-  }
+  $('pointSheetEstadoBox').classList.toggle('hidden', libre);
+  $('pointSheetMensajeWrap').classList.toggle('hidden', libre);
+  $('pointSheetHistorialBox').classList.remove('hidden');
+  $('pointSheetEdit').classList.add('hidden');
   $('btnPointSaveLabel').textContent = 'Guardar cambios';
+  $('pointMensajeInput').value = '';
+
+  pintarEstadosDetalle(p.id, p.estado || 'pendiente');
+  cargarHistorial(p.id);
   sheetOpen('pointSheet');
 }
 
@@ -1069,15 +1302,22 @@ function abrirFichaNueva(lng, lat) {
   $('pointSheetKicker').textContent = 'Punto nuevo';
   $('pointSheetTitle').textContent = 'Agregar punto';
   $('pointSheetError').textContent = '';
+  $('pointSheetBadges').innerHTML = '';
+  $('pointSheetDireccion').textContent = '';
+  $('pointSheetCoords').textContent = '';
+  $('pointSheetNotaBox')?.classList.add('hidden');
   $('fPDVNombre').value = '';
   $('fPDVDireccion').value = '';
-  $('fPDVNotas').value = '';
   $('fPDVLat').value = Number(lat).toFixed(6);
   $('fPDVLng').value = Number(lng).toFixed(6);
-  $('pointSheetBadges').innerHTML = '';
   $('btnPointNav').classList.add('hidden');
-  $('btnPointStatus').classList.add('hidden');
+  $('btnPointMap').classList.add('col-span-2');
+  $('btnPointEdit').classList.add('hidden');
   $('btnPointDelete').classList.add('hidden');
+  $('pointSheetEstadoBox').classList.add('hidden');
+  $('pointSheetMensajeWrap').classList.add('hidden');
+  $('pointSheetHistorialBox').classList.add('hidden');
+  $('pointSheetEdit').classList.remove('hidden');
   $('btnPointSaveLabel').textContent = 'Guardar punto';
   sheetOpen('pointSheet');
 }
@@ -1095,11 +1335,54 @@ $('btnPointLocate').addEventListener('click', () => {
   );
 });
 
-$('btnPointStatus').addEventListener('click', () => {
-  const p = puntoPorId(sheetPunto?.id);
-  if (!p) return;
+$('btnPointNav').addEventListener('click', () => {
+  if (!sheetPunto || sheetPunto.lat == null || sheetPunto.lng == null || sheetPunto.lat === '' || sheetPunto.lng === '') {
+    toast('Sin coordenadas para navegar', { error: true });
+    return;
+  }
+  abrirRuta(Number(sheetPunto.lat), Number(sheetPunto.lng));
+});
+
+$('btnPointEdit').addEventListener('click', () => {
+  const panel = $('pointSheetEdit');
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) {
+    // el formulario se abre debajo: desplazamiento suave hasta él
+    setTimeout(() => panel.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
+  }
+});
+
+$('btnPointCancel').addEventListener('click', () => {
+  $('pointSheetEdit').classList.add('hidden');
+  setTimeout(() => $('pointSheetScroll')?.scrollTo?.({ top: 0, behavior: 'smooth' }), 80);
+});
+
+$('btnPointCopy').addEventListener('click', async () => {
+  const t = $('pointSheetCoords').textContent.trim();
+  if (!t || t === 'Sin coordenadas') { toast('Sin coordenadas para copiar', { error: true }); return; }
+  try {
+    await navigator.clipboard.writeText(t);
+    toast('Coordenadas copiadas');
+  } catch {
+    toast('No se pudo copiar', { error: true });
+  }
+});
+
+$('btnPointMap').addEventListener('click', () => {
+  const id = sheetPunto?.id;
   sheetClose('pointSheet');
-  abrirStatusSheet(p.id, p.nombre);
+  if (id) verPuntoEnMapa(id);
+});
+
+$('btnPointMensaje').addEventListener('click', () => {
+  if (sheetPunto?.id) agregarMensaje(sheetPunto.id);
+});
+
+$('pointMensajeInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (sheetPunto?.id) agregarMensaje(sheetPunto.id);
+  }
 });
 
 $('btnPointSave').addEventListener('click', guardarFicha);
@@ -1107,7 +1390,6 @@ $('btnPointSave').addEventListener('click', guardarFicha);
 async function guardarFicha() {
   const nombre = $('fPDVNombre').value.trim();
   const direccion = $('fPDVDireccion').value.trim();
-  const notas = $('fPDVNotas').value.trim();
   const lat = parseFloat($('fPDVLat').value);
   const lng = parseFloat($('fPDVLng').value);
   const err = $('pointSheetError');
@@ -1122,11 +1404,11 @@ async function guardarFicha() {
     // NORMA: desde el móvil no se crean puntos, se envía una SOLICITUD que
     // el admin confirma o rechaza en Nueva actividad. Sin señal queda en cola.
     const { error } = await db.rpc('crear_solicitud_punto', {
-      p_nombre: nombre, p_direccion: direccion, p_notas: notas, p_lat: lat, p_lng: lng,
+      p_nombre: nombre, p_direccion: direccion, p_notas: '', p_lat: lat, p_lng: lng,
     });
     if (error) {
       if (esErrorDeRed(error)) {
-        encolar('crear', `local-${Date.now()}`, { nombre, direccion, notas, lat, lng });
+        encolar('crear', `local-${Date.now()}`, { nombre, direccion, notas: '', lat, lng });
         toast('Sin señal: la solicitud quedó en cola local');
       } else {
         err.textContent = error.message;
@@ -1141,6 +1423,7 @@ async function guardarFicha() {
     return;
   }
 
+  const notas = puntoPorId(sheetPunto.id)?.notas ?? '';
   const { error } = await db.rpc('actualizar_punto_terreno', {
     p_id: sheetPunto.id, p_nombre: nombre, p_direccion: direccion,
     p_notas: notas, p_lat: lat, p_lng: lng,
@@ -1155,8 +1438,12 @@ async function guardarFicha() {
     err.textContent = error.message;
     return;
   }
+  // Refleja la edición en la cabecera de la ficha sin cerrarla
+  $('pointSheetTitle').textContent = nombre;
+  $('pointSheetDireccion').textContent = direccion || 'Sin dirección';
+  $('pointSheetCoords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  $('pointSheetEdit').classList.add('hidden');
   toast('Punto actualizado');
-  sheetClose('pointSheet');
   await refrescar();
   pintarTodo();
 }
@@ -1170,41 +1457,21 @@ function dentroDelTerritorio(lat, lng) {
 // ============================================================
 // ESTADOS (RPC marcar_estado + deshacer + cola offline)
 // ============================================================
-function abrirStatusSheet(id, nombre) {
-  statusTarget = { id, nombre };
-  $('statusSheetTitle').textContent = nombre || 'Punto';
-  const box = $('statusBtns');
-  box.innerHTML = '';
-  const iconos = { pendiente: 'schedule', visitado: 'check_circle', erroneo: 'cancel', no_pasar: 'block' };
-  const clases = {
-    pendiente: 'bg-surface-container-high text-secondary',
-    visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
-    erroneo: 'bg-surface-container-highest text-on-surface-variant',
-    no_pasar: 'bg-error-container text-on-error-container',
-  };
-  for (const [valor, etiqueta] of ESTADOS) {
-    const b = document.createElement('button');
-    b.className = `min-h-[52px] rounded-xl ${clases[valor]} font-semibold flex items-center justify-between px-4 active:opacity-90`;
-    b.innerHTML = `<span class="flex items-center gap-3">
-        <span class="material-symbols-outlined text-[24px]">${iconos[valor]}</span>
-        <span>${etiqueta}</span></span>
-      <span class="material-symbols-outlined text-[20px]">chevron_right</span>`;
-    b.addEventListener('click', () => {
-      sheetClose('statusSheet');
-      aplicarEstado(statusTarget.id, valor);
-    });
-    box.appendChild(b);
-  }
-  sheetOpen('statusSheet');
+// Texto con el que queda registrada en el historial la marca de un punto
+function textoEstadoLog(estado) {
+  return `Marcado como ${estadoLabel(estado).toLowerCase()}`;
 }
 
 async function aplicarEstado(id, estado, { silent = false, mantenerLista = false } = {}) {
   const p = puntoPorId(id);
   if (!p) return;
   const prev = p.estado || 'pendiente';
+  const cambio = prev !== estado;
+  const notasPrev = p.notas;
 
   // Optimista: la lista refleja el cambio al instante
   p.estado = estado;
+  if (cambio) p.notas = textoEstadoLog(estado); // espejo del último movimiento
   if (!mantenerLista) pintarLista();
   pintarTarjetaTerritorio(); pintarFiltros(); actualizarCapaPuntos();
 
@@ -1212,18 +1479,30 @@ async function aplicarEstado(id, estado, { silent = false, mantenerLista = false
   if (error) {
     if (esErrorDeRed(error)) {
       encolar('estado', id, { estado });
+      if (cambio) encolar('nota', id, { texto: textoEstadoLog(estado) });
       if (!silent) toast('Sin señal: el cambio quedó en cola local');
       return;
     }
     p.estado = prev; // revierte el optimismo
+    if (cambio) p.notas = notasPrev;
     if (!mantenerLista) pintarLista();
     pintarTarjetaTerritorio(); pintarFiltros(); actualizarCapaPuntos();
     toast(error.message, { error: true });
     return;
   }
-  if (!silent && prev !== estado) {
+  // Bitácora: el cambio de estado queda como entrada del historial del punto
+  if (cambio) {
+    const { error: errorLog } = await db.rpc('agregar_nota_punto', {
+      p_id: id, p_texto: textoEstadoLog(estado),
+    });
+    if (errorLog) {
+      if (esErrorDeRed(errorLog)) encolar('nota', id, { texto: textoEstadoLog(estado) });
+      else toast('El estado se aplicó, pero no se pudo registrar en el historial', { error: true });
+    }
+  }
+  if (!silent && cambio) {
     toast(`Marcado como "${estadoLabel(estado)}"`, {
-      undo: prev !== estado ? { id, prev } : null,
+      undo: { id, prev },
     });
   }
   avisarSiCompleto();
@@ -1336,7 +1615,7 @@ $('btnPointDelete').addEventListener('click', () => {
 // ============================================================
 // DEVOLVER TERRITORIO
 // ============================================================
-$('btnDevolver').addEventListener('click', () => {
+function devolverTerritorio() {
   if (!territorio) return;
   preguntar(
     '¿Devolver el territorio?',
@@ -1354,29 +1633,22 @@ $('btnDevolver').addEventListener('click', () => {
       toast('Territorio devuelto a central');
     }
   );
-});
-
-// ============================================================
-// NAVEGACIÓN AL SIGUIENTE PUNTO
-// ============================================================
-$('btnNavegar').addEventListener('click', () => {
-  const siguiente = puntos.find((p) => (p.estado || 'pendiente') === 'pendiente') || puntos[0];
-  const c = siguiente ? coordsDe(siguiente) : null;
-  if (c) { abrirRuta(c.lat, c.lng); return; }
-  const bb = bboxDeGeometria(territorio?.territorios?.geom);
-  if (bb) { abrirRuta((bb[0][1] + bb[1][1]) / 2, (bb[0][0] + bb[1][0]) / 2); return; }
-  toast('Sin coordenadas para navegar', { error: true });
-});
+}
 
 // ============================================================
 // TABS (Mapa / Puntos / Tareas / Sync)
 // ============================================================
 function pintarTabs() {
-const vistas = { mapa: 'mapView', ruta: 'listView', sync: 'syncView', tareas: 'tareasView' };
+  const vistas = { mapa: 'mapView', ruta: 'listView', sync: 'syncView', tareas: 'tareasView' };
   for (const [tab, id] of Object.entries(vistas)) {
     $(id).classList.toggle('hidden', tab !== tabActual);
     $(id).classList.toggle('flex', tab === tabActual);
   }
+  const enMapa = tabActual === 'mapa';
+  $('appView').classList.toggle('map-mode', enMapa);
+  $('filtrosWrap').classList.toggle('hidden', tabActual !== 'ruta');
+  actualizarChromeTerritorio();
+  if (!enMapa) cerrarMenuMapa();
   document.querySelectorAll('.navtab').forEach((b) => {
     const activo = b.dataset.tab === tabActual;
     b.classList.toggle('text-secondary', activo);
@@ -1384,10 +1656,14 @@ const vistas = { mapa: 'mapView', ruta: 'listView', sync: 'syncView', tareas: 't
     b.classList.toggle('font-semibold', activo);
     b.classList.toggle('text-on-surface-variant', !activo);
   });
-  if (tabActual === 'mapa') {
+  if (enMapa) {
     if (!map) {
       try { initMap(); } catch (e) { console.error(e); toast('No se pudo iniciar el mapa: ' + e.message, { error: true }); }
-    } else if (map) { map.resize(); actualizarCapaPuntos(); }
+    } else {
+      actualizarCapaPuntos();
+      map.resize();
+    }
+    requestAnimationFrame(() => { if (map) map.resize(); });
   }
   if (tabActual === 'tareas') cargarTareas();
 }
@@ -1439,8 +1715,12 @@ async function cargarTareas() {
 function pintarTareas() {
   const box = $('tareasList');
   if (!box) return;
-  if (!tareas.length) {
-    box.innerHTML = '<div class="text-sm text-on-surface-variant text-center py-8 bg-surface-container-lowest rounded-xl">Sin tareas de verificación pendientes.</div>';
+  const hay = tareas.length > 0;
+  $('tareasIntro').classList.toggle('hidden', !hay);
+  $('btnTareasMapa').classList.toggle('hidden', !hay);
+  actualizarChromeTerritorio();
+  if (!hay) {
+    box.innerHTML = '<div class="text-sm text-on-surface-variant text-center py-8 bg-surface-container-lowest rounded-xl">Sin tareas asignadas.</div>';
     return;
   }
   box.innerHTML = tareas.map((t) => {
@@ -1566,6 +1846,11 @@ async function ejecutarOp(op) {
     }
     if (op.tipo === 'borrar') {
       const { error } = await db.rpc('eliminar_punto_propio', { p_id: op.clave });
+      if (error) return esErrorDeRed(error) ? 'offline' : 'descartado';
+      return 'ok';
+    }
+    if (op.tipo === 'nota') {
+      const { error } = await db.rpc('agregar_nota_punto', { p_id: op.clave, p_texto: op.datos.texto });
       if (error) return esErrorDeRed(error) ? 'offline' : 'descartado';
       return 'ok';
     }

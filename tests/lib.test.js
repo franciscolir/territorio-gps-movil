@@ -178,10 +178,10 @@ describe('cola offline (nuevaOpCola / colaAgregar / colaQuitar / colaResumen)', 
       lib.nuevaOpCola('borrar', 'p3', {}, 'd', 4),
     ];
     expect(lib.colaResumen(ops)).toEqual({
-      total: 4, estado: 2, crear: 1, editar: 0, borrar: 1,
+      total: 4, estado: 2, crear: 1, editar: 0, borrar: 1, nota: 0,
     });
     expect(lib.colaResumen([])).toEqual({
-      total: 0, estado: 0, crear: 0, editar: 0, borrar: 0,
+      total: 0, estado: 0, crear: 0, editar: 0, borrar: 0, nota: 0,
     });
   });
 });
