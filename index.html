@@ -107,6 +107,30 @@
     html.dark .nota-label { color: #fbbf24; }
     html.dark .nota-texto { color: #fde68a; }
     html.dark .nota-meta { color: #d6a419; }
+    /* ---- Banner GPS inactivo (ámbar, vista inicio) ---- */
+    .gps-off { background: linear-gradient(135deg, #fff7ed, #ffedd5); border: 1px solid rgba(251, 191, 36, .45); }
+    .gps-off-ic { background-color: #f59e0b; color: #fff; }
+    .gps-off-title { color: #78350f; }
+    .gps-off-chip { background-color: rgba(253, 230, 138, .9); color: #92400e; }
+    .gps-off-txt { color: rgba(146, 64, 14, .85); }
+    .gps-off-btn { background-color: #d97706; color: #fff; }
+    html.dark .gps-off { background: linear-gradient(135deg, #33270e, #453417); border-color: rgba(251, 191, 36, .25); }
+    html.dark .gps-off-ic { background-color: #fbbf24; color: #451a03; }
+    html.dark .gps-off-title { color: #fbbf24; }
+    html.dark .gps-off-chip { background-color: rgba(180, 130, 20, .35); color: #fde68a; }
+    html.dark .gps-off-txt { color: #d6a419; }
+    html.dark .gps-off-btn { background-color: #fbbf24; color: #451a03; }
+    /* ---- Banner GPS activo (verde calibrado, vista inicio) ---- */
+    .gps-on { background-color: #95f8a7; }
+    .gps-on-ic { background-color: #003f19; color: #95f8a7; }
+    .gps-on-title { color: #00210a; }
+    .gps-on-dot { background-color: #00210a; }
+    .gps-on-check { color: #00210a; }
+    html.dark .gps-on { background-color: #0d4d24; }
+    html.dark .gps-on-ic { background-color: #95f8a7; color: #0d4d24; }
+    html.dark .gps-on-title { color: #95f8a7; }
+    html.dark .gps-on-dot { background-color: #95f8a7; }
+    html.dark .gps-on-check { color: #95f8a7; }
     /* Punto azul de mi ubicación en el mapa */
     .user-dot {
       width: 18px; height: 18px; border-radius: 50%;
@@ -244,27 +268,114 @@
         <section class="px-4 pb-2" id="filtrosWrap">
           <div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4" id="filtros">
             <button data-filtro="todos" class="filtro shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border bg-primary text-on-primary border-transparent active:scale-95 transition-all">
-              <span class="material-symbols-outlined text-[16px]">layers</span>
               <span>Todos</span>
               <span data-badge="todos" class="rounded-full px-1.5 text-[10px] font-bold bg-black/15">0</span>
             </button>
             <button data-filtro="pendiente" class="filtro shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border bg-surface-container-lowest text-on-surface-variant border-outline-variant active:scale-95 transition-all">
-              <span class="material-symbols-outlined text-[16px]">schedule</span>
               <span>Pendientes</span>
               <span data-badge="pendiente" class="rounded-full px-1.5 text-[10px] font-bold bg-black/10">0</span>
             </button>
             <button data-filtro="no_pasar" class="filtro shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border bg-surface-container-lowest text-on-surface-variant border-outline-variant active:scale-95 transition-all">
-              <span class="material-symbols-outlined text-[16px]">block</span>
               <span>No pasar</span>
               <span data-badge="no_pasar" class="rounded-full px-1.5 text-[10px] font-bold bg-black/10">0</span>
             </button>
             <button data-filtro="completado" class="filtro shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold border bg-surface-container-lowest text-on-surface-variant border-outline-variant active:scale-95 transition-all">
-              <span class="material-symbols-outlined text-[16px]">check_circle</span>
               <span>Completados</span>
               <span data-badge="completado" class="rounded-full px-1.5 text-[10px] font-bold bg-black/10">0</span>
             </button>
           </div>
         </section>
+      </div>
+
+      <!-- VISTA INICIO (saludo, GPS, labores, métrica y sync) -->
+      <div id="inicioView" class="hidden flex-col w-full px-4 pt-3 pb-2 gap-4">
+        <!-- Saludo & fecha -->
+        <div class="flex items-center justify-between pt-1">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <span class="material-symbols-outlined text-[16px] text-primary">calendar_today</span>
+              <span class="text-xs text-on-surface-variant font-medium" id="inicioFecha"></span>
+            </div>
+            <h2 class="text-xl font-bold text-on-surface tracking-tight leading-tight" id="inicioSaludo">¡Hola!</h2>
+          </div>
+          <div class="px-2.5 py-1 rounded-lg bg-surface-container-high/60 text-on-surface-variant text-[11px] font-semibold flex items-center gap-1 shrink-0">
+            <span class="material-symbols-outlined text-[14px] text-secondary">badge</span>
+            <span>Encargado de Territorio</span>
+          </div>
+        </div>
+
+        <!-- Banner GPS (dinámico) -->
+        <div id="inicioGpsBanner"></div>
+
+        <!-- Labores asignadas -->
+        <div id="inicioLabores" class="hidden flex flex-col gap-2.5">
+          <div class="flex items-center justify-between px-0.5">
+            <h3 class="text-[17px] font-bold text-on-surface">Labores asignadas</h3>
+            <span id="inicioLaboresChip" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary"></span>
+          </div>
+
+          <!-- Labor: Territorio Asignado -->
+          <button id="btnInicioTerritorio" class="hidden bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-surface-container hover:border-primary/30 transition-all flex-col gap-3 w-full text-left active:scale-[0.99]">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-start gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                  <span class="material-symbols-outlined text-[22px]">map</span>
+                </div>
+                <div class="min-w-0">
+                  <span class="text-[11px] font-bold tracking-wider uppercase text-primary">Territorio asignado</span>
+                  <h4 class="text-base font-bold text-on-surface leading-snug truncate" id="inicioTerritorioNombre">—</h4>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span id="inicioTerritorioChip" class="text-xs px-2.5 py-1 rounded-full bg-secondary-container/40 text-secondary font-bold"></span>
+                <span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+              </div>
+            </div>
+            <div class="bg-surface-container-low/70 rounded-xl p-3 flex items-center justify-between border border-surface-container-high/40">
+              <div class="flex items-center gap-1.5 text-on-surface-variant min-w-0">
+                <span class="material-symbols-outlined text-[16px] text-primary">location_city</span>
+                <span class="text-xs font-medium truncate" id="inicioComuna"></span>
+              </div>
+              <div class="flex items-center gap-1 text-secondary font-semibold text-xs shrink-0">
+                <span class="material-symbols-outlined text-[16px]">storefront</span>
+                <span id="inicioPorVisitar">0 por visitar</span>
+              </div>
+            </div>
+          </button>
+
+          <!-- Labor: Tareas Individuales (dinámica) -->
+          <div id="inicioCardTareas" class="hidden"></div>
+        </div>
+
+        <!-- Métrica consolidada -->
+        <div id="inicioMetricas" class="hidden relative overflow-hidden bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-primary/20 flex-col gap-3.5">
+          <div class="absolute -right-6 -bottom-6 w-28 h-28 bg-primary/5 rounded-full pointer-events-none"></div>
+          <div class="w-full flex items-start justify-between">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1 text-primary">
+                <span class="material-symbols-outlined text-[18px]">analytics</span>
+                <span class="text-[11px] font-bold uppercase tracking-wider">Métrica consolidada</span>
+              </div>
+              <h3 class="text-sm font-bold text-on-surface mt-0.5">Progreso Total de Labores</h3>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-3xl font-extrabold text-primary leading-none" id="inicioProgressLabel">0%</span>
+              <span class="block text-[11px] font-semibold text-on-surface-variant">completado</span>
+            </div>
+          </div>
+          <div class="w-full h-3 rounded-full bg-surface-container-highest overflow-hidden p-0.5">
+            <div class="h-full bg-gradient-to-r from-primary via-primary-container to-secondary rounded-full transition-all duration-700" id="inicioProgressBar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Pie de sincronización -->
+        <div class="flex items-center justify-center gap-2 pt-1 pb-1">
+          <span id="inicioSyncDot" class="w-2 h-2 rounded-full bg-tertiary-fixed shrink-0"></span>
+          <span id="inicioSyncTxt" class="text-xs text-on-surface-variant font-medium">Todo sincronizado con central</span>
+          <button id="btnInicioSync" aria-label="Sincronizar ahora" class="w-7 h-7 rounded-full flex items-center justify-center text-primary active:bg-surface-container-high transition-colors shrink-0">
+            <span class="material-symbols-outlined text-[16px]">sync</span>
+          </button>
+        </div>
       </div>
 
       <!-- VISTA LISTA -->
@@ -414,24 +525,35 @@
       </button>
     </div>
 
+    <!-- FAB "Enviar informe": vuelve a abrir la tabla de revisión si se cerró sin enviar -->
+    <div id="fabInforme" class="hidden fixed bottom-40 left-0 w-full px-4 z-30">
+      <button id="btnFabInforme" class="w-full min-h-[48px] bg-primary text-on-primary rounded-xl shadow-lg flex items-center justify-between px-4 active:bg-secondary">
+        <span class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[22px]">assessment</span>
+          <span class="text-sm font-bold">Enviar informe</span>
+        </span>
+        <span class="material-symbols-outlined text-[18px] opacity-80">chevron_right</span>
+      </button>
+    </div>
+
     <!-- Bottom nav (3 tabs) -->
     <nav class="fixed bottom-0 w-full z-40 pb-safe bg-surface/95 backdrop-blur shadow-[0_-1px_8px_rgba(0,0,0,0.04)]">
       <div class="flex justify-around items-center h-16 px-2">
+        <button data-tab="inicio" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-secondary bg-surface-container font-semibold">
+          <span class="material-symbols-outlined text-[24px]">home</span>
+          <span class="text-xs">Inicio</span>
+        </button>
         <button data-tab="mapa" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
           <span class="material-symbols-outlined text-[24px]">map</span>
           <span class="text-xs">Mapa</span>
         </button>
-        <button data-tab="ruta" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-secondary bg-surface-container font-semibold">
+        <button data-tab="ruta" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
           <span class="material-symbols-outlined text-[24px]">checklist</span>
           <span class="text-xs">Puntos</span>
         </button>
         <button data-tab="tareas" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
           <span class="material-symbols-outlined text-[24px]">fact_check</span>
           <span class="text-xs">Tareas</span>
-        </button>
-        <button data-tab="sync" class="navtab flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 rounded text-on-surface-variant">
-          <span class="material-symbols-outlined text-[24px]">sync</span>
-          <span class="text-xs">Sync</span>
         </button>
       </div>
     </nav>
@@ -477,7 +599,7 @@
               <p class="text-sm font-bold text-on-surface leading-snug break-words" id="pointSheetDireccion"></p>
             </div>
           </div>
-          <div class="flex items-center justify-between gap-2 pt-2 border-t border-outline-variant/40">
+          <div id="pointSheetCoordsRow" class="flex items-center justify-between gap-2 pt-2 border-t border-outline-variant/40">
             <div class="flex items-center gap-1.5 text-xs text-on-surface-variant min-w-0">
               <span class="material-symbols-outlined text-[14px] shrink-0">my_location</span>
               <span id="pointSheetCoords" class="font-mono truncate"></span>
@@ -486,7 +608,7 @@
               <span class="material-symbols-outlined text-[13px]">content_copy</span><span>Copiar</span>
             </button>
           </div>
-          <div class="grid grid-cols-2 gap-2">
+          <div id="pointSheetAcciones" class="grid grid-cols-2 gap-2">
             <button id="btnPointNav" type="button"
                     class="min-h-[44px] rounded-xl bg-secondary text-on-secondary text-xs font-bold flex items-center justify-center gap-1.5 active:opacity-90">
               <span class="material-symbols-outlined text-[18px]">directions</span><span>Cómo llegar</span>
@@ -505,17 +627,6 @@
             <span class="text-[11px] font-medium text-on-surface-variant">Toca para aplicar</span>
           </div>
           <div class="grid grid-cols-2 gap-2" id="pointSheetEstados"></div>
-        </section>
-
-        <!-- Último mensaje -->
-        <section id="pointSheetNotaBox" class="hidden nota-card rounded-2xl p-3.5 flex flex-col gap-1">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] font-bold uppercase tracking-wider nota-label flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-[15px]">sticky_note_2</span>Último mensaje
-            </span>
-            <span class="text-[10px] font-medium nota-meta truncate" id="pointSheetNotaMeta"></span>
-          </div>
-          <p class="text-xs italic font-medium nota-texto leading-relaxed break-words" id="pointSheetNotaTexto"></p>
         </section>
 
         <!-- Editar punto (formulario) -->

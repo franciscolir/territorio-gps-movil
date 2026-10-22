@@ -44,7 +44,7 @@ let territorio = null;      // asignación activa con el territorio anidado
 let errorTerritorio = null; // último error al cargar la asignación (diagnóstico)
 let puntos = [];        // puntos del servidor (RLS ya limita al territorio)
 let cola = [];          // operaciones offline pendientes
-let tabActual = 'ruta';
+let tabActual = 'inicio';
 let filtroActual = 'todos';
 let map = null;
 let mapListo = false;
@@ -68,6 +68,7 @@ document.documentElement.classList.toggle('dark', tema === 'oscuro');
 
 // GPS del dispositivo
 let gpsEstado = 'pendiente'; // 'activo' | 'pendiente' | 'nodisponible'
+let gpsPrecisionM = null; // precisión del último fix (metros)
 let gpsWatchId = null;
 let gpsUltima = null;        // { lat, lng }
 let gpsIntentado = false;
@@ -110,7 +111,25 @@ $('toastUndo').addEventListener('click', () => {
 });
 
 function sheetOpen(id) { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
-function sheetClose(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
+function sheetClose(id) {
+  $(id).classList.add('hidden');
+  $(id).classList.remove('flex');
+  // La tabla de revisión cerrada sin enviar habilita el FAB «Enviar informe»
+  if (id === 'revisionSheet' && !enviandoInforme) { revisionPendiente = true; actualizarFabInforme(); }
+}
+
+// FAB "Enviar informe": disponible en todas las vistas mientras quede
+// pendiente por revisar/enviar (se limpia al enviar o al devolver territorio)
+let revisionPendiente = false;
+let enviandoInforme = false;
+
+function actualizarFabInforme() {
+  if (!territorio) revisionPendiente = false;
+  $('fabInforme').classList.toggle('hidden', !revisionPendiente);
+  $('fabInforme').classList.toggle('flex', revisionPendiente);
+}
+
+$('btnFabInforme').addEventListener('click', () => abrirRevision());
 
 document.querySelectorAll('[data-close]').forEach((b) => {
   b.addEventListener('click', () => sheetClose(b.dataset.close));
@@ -155,6 +174,7 @@ function setGpsEstado(estado) {
     txt.textContent = info.txt;
   });
   pintarGpsConfig();
+  pintarInicioGps();
 }
 
 function activarGps() {
@@ -167,6 +187,7 @@ function activarGps() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       gpsUltima = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      gpsPrecisionM = pos.coords.accuracy ?? null;
       setGpsEstado('activo');
       ponerMarcadorUsuario();
       gpsWatchId = navigator.geolocation.watchPosition((p) => {
@@ -539,6 +560,9 @@ function pintarTodo() {
   pintarLista();
   pintarTarjetaTerritorio();
   pintarFiltros();
+  pintarInicio();
+  pintarTabs();
+  actualizarFabInforme();
   if (mapListo) actualizarCapaPuntos();
 }
 
@@ -547,6 +571,187 @@ function pintarHeader() {
   $('headerTitulo').textContent = t
     ? [t.comuna, t.nombre].filter(Boolean).join(' · ')
     : 'Sin territorio';
+}
+
+// ============================================================
+// VISTA INICIO (saludo, GPS, territorio, métricas y sync)
+// ============================================================
+function nombreDesdeEmail(email) {
+  const base = String(email || '').split('@')[0].split(/[._\-+]+/)[0] || '';
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : '';
+}
+
+function fechaHoy() {
+  const f = new Date().toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
+  return f.charAt(0).toUpperCase() + f.slice(1);
+}
+
+// Calidad del fix según los metros de error reportados por el GPS
+function calidadPrecision(m) {
+  if (m == null) return 'Precisión disponible en el mapa';
+  const q = m <= 10 ? 'Excelente' : m <= 30 ? 'Buena' : 'Regular';
+  return `Precisión de alta fidelidad: ${Math.round(m)}m (${q})`;
+}
+
+function pintarInicio() {
+  const nombre = nombreDesdeEmail(user?.email);
+  $('inicioSaludo').textContent = nombre ? `¡Hola, ${nombre}!` : '¡Hola!';
+  $('inicioFecha').textContent = fechaHoy();
+  pintarInicioGps();
+  pintarInicioLabores();
+  pintarInicioTerritorio();
+  pintarInicioTareas();
+  pintarInicioMetricas();
+  pintarInicioSync();
+}
+
+function pintarInicioGps() {
+  const box = $('inicioGpsBanner');
+  if (!box) return;
+  if (gpsEstado === 'activo') {
+    box.className = 'gps-on rounded-2xl p-4 flex items-center justify-between shadow-sm';
+    box.innerHTML = `
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl gps-on-ic flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[22px]">my_location</span>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[15px] font-bold gps-on-title">GPS Activo y Calibrado</span>
+            <span class="w-2 h-2 rounded-full gps-on-dot animate-pulse"></span>
+          </div>
+          <p class="text-[12px] text-on-surface-variant mt-0.5">${escapeHtml(calidadPrecision(gpsPrecisionM))}</p>
+        </div>
+      </div>
+      <span class="material-symbols-outlined gps-on-check text-[26px] shrink-0">check_circle</span>`;
+    return;
+  }
+  const noDisponible = gpsEstado === 'nodisponible';
+  box.className = 'gps-off rounded-2xl p-4 flex flex-col gap-3';
+  box.innerHTML = `
+    <div class="flex items-start gap-3">
+      <div class="w-11 h-11 rounded-xl gps-off-ic flex items-center justify-center shrink-0 mt-0.5">
+        <span class="material-symbols-outlined text-[24px]">location_searching</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1 flex-wrap">
+          <span class="text-[16px] font-bold gps-off-title">${noDisponible ? 'Ubicación no disponible' : 'Ubicación GPS inactiva'}</span>
+          <span class="text-[10px] gps-off-chip font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Requerido para operar</span>
+        </div>
+        <p class="text-[13px] gps-off-txt mt-1 leading-snug">${noDisponible
+          ? 'Permiso denegado o GPS apagado. Actívalo en tu teléfono para registrar visitas y validar puntos.'
+          : 'Para iniciar tu jornada y validar puntos en terreno necesitas activar tu GPS de alta precisión.'}</p>
+      </div>
+    </div>
+    <button id="btnInicioGps" class="w-full h-11 gps-off-btn rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm">
+      <span class="material-symbols-outlined text-[20px]">near_me</span>
+      <span>${noDisponible ? 'Reintentar' : 'Activar GPS'}</span>
+    </button>`;
+  $('btnInicioGps')?.addEventListener('click', activarGps);
+}
+
+function pintarInicioLabores() {
+  const seccion = $('inicioLabores');
+  if (!seccion) return;
+  seccion.classList.toggle('hidden', !territorio);
+  if (!territorio) return;
+  const n = 1 + (tareas.length ? 1 : 0);
+  $('inicioLaboresChip').textContent = n === 1 ? '1 labor activa' : `${n} labores activas`;
+}
+
+function pintarInicioTerritorio() {
+  if (!territorio) return;
+  const t = territorio.territorios || {};
+  $('btnInicioTerritorio').classList.remove('hidden');
+
+  $('inicioTerritorioNombre').textContent = t.nombre || 'Territorio';
+  const extra = colaResumen(cola).crear;
+  $('inicioTerritorioChip').textContent = `${puntos.length + extra} pts`;
+  $('inicioComuna').textContent = t.comuna || 'Comuna sin registrar';
+  $('inicioPorVisitar').textContent = `${territorioAvance(puntos).pendiente + extra} por visitar`;
+}
+
+function pintarInicioTareas() {
+  const box = $('inicioCardTareas');
+  if (!box) return;
+  if (!tareas.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.classList.remove('hidden');
+
+  const dotPorEstado = { pendiente: 'bg-outline', visitado: 'bg-tertiary-fixed', erroneo: 'bg-error', no_pasar: 'bg-secondary' };
+  const recuento = {};
+  tareas.forEach((t) => {
+    const e = t.puntos?.estado ?? 'pendiente';
+    recuento[e] = (recuento[e] || 0) + 1;
+  });
+  const chips = Object.entries(recuento).map(([e, n]) => `
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container-lowest border border-surface-container text-on-surface text-[11px] font-medium shadow-sm">
+      <span class="w-1.5 h-1.5 rounded-full ${dotPorEstado[e] || 'bg-outline'}"></span>
+      <span>${estadoLabel(e)} (${n})</span>
+    </span>`).join('');
+  const visitados = (recuento.visitado || 0) + (recuento.erroneo || 0);
+
+  box.innerHTML = `
+    <button id="btnInicioTareas" class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-surface-container hover:border-primary/30 transition-all flex flex-col gap-3 w-full text-left active:scale-[0.99]">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-start gap-3 flex-1 min-w-0">
+          <div class="w-10 h-10 rounded-xl bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center shrink-0 mt-0.5">
+            <span class="material-symbols-outlined text-[22px]">assignment</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <span class="text-[11px] font-bold tracking-wider uppercase text-on-tertiary-fixed">Tareas individuales</span>
+            <h4 class="text-base font-bold text-on-surface leading-snug">Confirmar estado de Puntos</h4>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span class="text-xs px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-bold">${tareas.length} tareas</span>
+          <span class="material-symbols-outlined text-outline text-[20px]">chevron_right</span>
+        </div>
+      </div>
+      <div class="bg-surface-container-low/70 rounded-xl p-3 flex flex-col gap-2.5 border border-surface-container-high/40">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1.5 font-semibold text-on-tertiary-fixed">
+            <span class="material-symbols-outlined text-[17px]">storefront</span><span>${tareas.length} puntos asignados</span>
+          </div>
+          ${visitados ? `
+            <div class="flex items-center gap-1 text-on-surface-variant font-medium">
+              <span class="material-symbols-outlined text-[15px] text-primary">travel_explore</span><span>${visitados} visitado${visitados === 1 ? '' : 's'}</span>
+            </div>` : ''}
+        </div>
+        <div class="flex flex-wrap gap-1.5 pt-1">${chips}</div>
+      </div>
+    </button>`;
+  $('btnInicioTareas')?.addEventListener('click', () => irA('tareas'));
+}
+
+function pintarInicioMetricas() {
+  const box = $('inicioMetricas');
+  if (!box) return;
+  if (!territorio) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+
+  const av = territorioAvance(puntos);
+  const total = av.total + colaResumen(cola).crear;
+  const pct = total ? Math.round((av.visitado / total) * 100) : 0;
+  $('inicioProgressLabel').textContent = `${pct}%`;
+  $('inicioProgressBar').style.width = `${pct}%`;
+}
+
+function pintarInicioSync() {
+  const dot = $('inicioSyncDot');
+  const txt = $('inicioSyncTxt');
+  if (!dot || !txt) return;
+  const r = colaResumen(cola);
+  const off = !navigator.onLine;
+  if (r.total) {
+    dot.className = 'w-2 h-2 rounded-full bg-error shrink-0';
+    txt.textContent = `${r.total} cambio${r.total === 1 ? '' : 's'} pendiente${r.total === 1 ? '' : 's'} de sincronizar`;
+  } else if (off) {
+    dot.className = 'w-2 h-2 rounded-full bg-outline shrink-0';
+    txt.textContent = 'Modo offline activo · los cambios se guardan en el teléfono';
+  } else {
+    dot.className = 'w-2 h-2 rounded-full bg-tertiary-fixed shrink-0';
+    txt.textContent = 'Todo sincronizado con central';
+  }
 }
 
 // ============================================================
@@ -659,9 +864,6 @@ function pintarHistorial(items) {
     box.innerHTML = '<p data-hist-vacio class="text-xs text-on-surface-variant">Sin mensajes todavía.</p>';
     return;
   }
-  const ultimo = items[items.length - 1];
-  const meta = $('pointSheetNotaMeta');
-  if (meta) meta.textContent = ultimo.autor ? `${ultimo.autor} · ${fechaCorta(ultimo.at)}` : fechaCorta(ultimo.at);
   box.innerHTML = `<div class="border-l-2 border-outline-variant ml-1.5 flex flex-col gap-2">${items.map((n) => `
     <div class="relative pl-4">
       <span class="absolute -left-[7px] top-2 w-3 h-3 rounded-full bg-secondary ring-4 ring-surface-container-lowest"></span>
@@ -677,12 +879,6 @@ function pintarHistorial(items) {
 }
 
 // Tarjetas grandes del selector de estado (detalle del punto)
-const SUBTITULOS_ESTADO = {
-  pendiente: 'Por visitar hoy',
-  visitado: 'Completada con éxito',
-  erroneo: 'Datos incorrectos',
-  no_pasar: 'Cancelado / cerrado',
-};
 const CLASES_ESTADO_IC = {
   pendiente: 'bg-secondary-container text-on-secondary-container',
   visitado: 'bg-tertiary-fixed text-on-tertiary-fixed',
@@ -717,7 +913,6 @@ function pintarEstadosDetalle(id, est) {
         </span>
         <span class="flex-1 min-w-0">
           <span class="block font-bold text-xs truncate leading-tight">${etiqueta}</span>
-          <span class="block text-[10px] text-on-surface-variant font-normal truncate">${SUBTITULOS_ESTADO[valor]}</span>
         </span>
         ${activo ? `<span class="material-symbols-outlined text-[16px] shrink-0 ${CHECK_ESTADO_DETALLE[valor]}">check_circle</span>` : ''}
       </button>`;
@@ -725,17 +920,6 @@ function pintarEstadosDetalle(id, est) {
   box.querySelectorAll('[data-estado-detalle]').forEach((b) => {
     b.addEventListener('click', () => elegirEstadoDetalle(id, b.dataset.valor));
   });
-}
-
-function pintarNotaCard(p) {
-  const box = $('pointSheetNotaBox');
-  if (!box) return;
-  const hay = !!(p.notas && p.notas.trim());
-  box.classList.toggle('hidden', !hay);
-  if (hay) {
-    $('pointSheetNotaTexto').textContent = p.notas;
-    $('pointSheetNotaMeta').textContent = '';
-  }
 }
 
 function pintarBadgesFicha(p, libre) {
@@ -748,6 +932,8 @@ function elegirEstadoRapido(art, id, valor) {
   if (!puntoPorId(id)) return;
   // mantenerLista: evita el re-render que cortaría la transición del chip
   aplicarEstado(id, valor, { mantenerLista: true });
+  // No pasar pasa a card/simple detalle: re-render de la lista
+  if (valor === 'no_pasar') { pintarLista(); return; }
   actualizarEstadoEnCard(art, valor);
 }
 
@@ -755,9 +941,10 @@ async function elegirEstadoDetalle(id, valor) {
   const p = puntoPorId(id);
   if (!p) return;
   await aplicarEstado(id, valor, { mantenerLista: true });
+  // No pasar: la ficha pasa al detalle simple de solo lectura
+  if (valor === 'no_pasar') { abrirFicha(id); return; }
   pintarEstadosDetalle(id, valor);
   pintarBadgesFicha(p, !territorio);
-  pintarNotaCard(p);
   if (navigator.onLine) await cargarHistorial(id); // muestra la nueva entrada del log
 }
 
@@ -782,7 +969,19 @@ function actualizarChromeTerritorio() {
   if (!territorio) { $('secTerritorio').classList.add('hidden'); return; }
   const total = territorioAvance(puntos).total + colaResumen(cola).crear;
   const sinTareas = tabActual === 'tareas' && !tareas.length;
-  $('secTerritorio').classList.toggle('hidden', !total || sinTareas);
+  // En Inicio el avance vive en su propia tarjeta: sin cabecera duplicada
+  const enInicio = tabActual === 'inicio';
+  $('secTerritorio').classList.toggle('hidden', !total || sinTareas || enInicio);
+}
+
+// La métrica de Inicio vive fuera del re-render de cards/lista: se refresca
+// aparte en cada cambio que afecta el avance (estados, cola, filtros).
+function actualizarProgresoInicio() {
+  actualizarChromeTerritorio();
+  if (tabActual !== 'inicio') return;
+  pintarInicioMetricas();
+  pintarInicioTerritorio();
+  pintarInicioSync();
 }
 
 function pintarVistaTerritorio() {
@@ -827,6 +1026,7 @@ function pintarCola() {
         <span class="text-xs text-on-surface-variant truncate">${escapeHtml(o.clave)}</span>
       </div>
     </div>`).join('');
+  pintarInicioSync();
 }
 
 function iconoOp(tipo) {
@@ -924,7 +1124,17 @@ function pintarLista() {
   const todo = [...puntos, ...locales].filter(pasarFiltro);
 
   if (!todo.length) {
-    box.innerHTML = '<div class="text-sm text-on-surface-variant text-center py-8">No hay puntos con este filtro.</div>';
+    // Sin territorio asignado (modo libre): estado vacío explícito en Puntos
+    box.innerHTML = !territorio
+      ? `<div class="bg-surface-container-lowest rounded-2xl p-6 shadow-sm border border-outline-variant/40 flex flex-col items-center gap-2 text-center">
+          <div class="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[24px]">map</span>
+          </div>
+          <h3 class="text-base font-bold text-on-surface">Sin territorio asignado</h3>
+          <p class="text-xs text-on-surface-variant">Pide una asignación a central para ver los puntos de cuidado.</p>
+          ${errorTerritorio ? `<p class="text-[11px] text-on-surface-variant break-words">No se pudo cargar: ${escapeHtml(errorTerritorio)}</p>` : ''}
+        </div>`
+      : '<div class="text-sm text-on-surface-variant text-center py-8">No hay puntos con este filtro.</div>';
     return;
   }
 
@@ -936,6 +1146,19 @@ function pintarLista() {
       const est = p.estado || 'pendiente';
       const coords = coordsDe(p);
       const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : null;
+      if (est === 'no_pasar') {
+        return `
+        <article class="bg-surface-container-lowest rounded-2xl p-3 shadow-sm border border-error/40 flex flex-col gap-1.5 cursor-pointer active:scale-[0.99] transition-transform" data-id="${escapeHtml(p.id)}" data-abrir="${escapeHtml(p.id)}">
+          <div class="flex items-start justify-between gap-2">
+            <h3 class="text-sm font-bold text-on-surface truncate leading-snug flex-1 min-w-0">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+            ${chipEstado('no_pasar')}
+          </div>
+          <div class="flex items-center gap-1.5 text-xs text-on-surface-variant min-w-0">
+            <span class="material-symbols-outlined text-[14px] shrink-0">location_on</span>
+            <span class="font-medium truncate">${escapeHtml(p.direccion || 'Sin dirección')}</span>
+          </div>
+        </article>`;
+      }
       return `
       <article class="bg-surface-container-lowest rounded-2xl p-3 shadow-sm border ${acentoEstado(est)} flex flex-col gap-2" data-id="${escapeHtml(p.id)}">
         <div class="flex items-start justify-between gap-2">
@@ -950,14 +1173,14 @@ function pintarLista() {
         </div>
         ${p.notas ? notaPill(p.notas) : ''}
         <div class="grid grid-cols-3 gap-2 pt-2 border-t border-outline-variant/40">
-          <button data-abrir="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-primary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
-            <span class="material-symbols-outlined text-[16px]">visibility</span>Ver
+          <button data-abrir="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-primary text-xs font-semibold flex items-center justify-center active:bg-surface-container-high">
+            Detalles
           </button>
-          <a ${nav ? `href="${nav}" target="_blank" rel="noopener"` : ''} class="min-h-[40px] rounded-xl bg-secondary text-on-secondary text-xs font-semibold flex items-center justify-center gap-1 active:opacity-90 ${nav ? '' : 'opacity-40 pointer-events-none'}">
-            <span class="material-symbols-outlined text-[16px]">directions</span>Cómo llegar
+          <a ${nav ? `href="${nav}" target="_blank" rel="noopener"` : ''} class="min-h-[40px] rounded-xl bg-secondary text-on-secondary text-xs font-semibold flex items-center justify-center active:opacity-90 ${nav ? '' : 'opacity-40 pointer-events-none'}">
+            Cómo llegar
           </a>
-          <button data-ver-mapa="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-secondary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
-            <span class="material-symbols-outlined text-[16px]">map</span>En mapa
+          <button data-ver-mapa="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-secondary text-xs font-semibold flex items-center justify-center active:bg-surface-container-high">
+            En mapa
           </button>
         </div>
       </article>`;
@@ -976,6 +1199,21 @@ function pintarLista() {
     const coords = coordsDe(p);
     const nav = coords ? linkComoLlegar(coords.lat, coords.lng) : homeAppMapa();
     const local = !!p.local;
+    // No pasar: card mínima. Solo nombre, dirección y estado; el toque abre el
+    // detalle simple (sin acciones ni cambio de estado, solo permitir mensaje).
+    if (est === 'no_pasar') {
+      return `
+      <article class="bg-surface-container-lowest rounded-2xl p-3 shadow-sm border border-error/40 flex flex-col gap-1.5 cursor-pointer active:scale-[0.99] transition-transform" data-id="${escapeHtml(p.id)}" data-abrir="${escapeHtml(p.id)}">
+        <div class="flex items-start justify-between gap-2">
+          <h3 class="text-sm font-bold text-on-surface truncate leading-snug flex-1 min-w-0">${escapeHtml(p.nombre || 'Sin nombre')}</h3>
+          ${chipEstado('no_pasar')}
+        </div>
+        <div class="flex items-center gap-1.5 text-xs text-on-surface-variant min-w-0">
+          <span class="material-symbols-outlined text-[14px] shrink-0">location_on</span>
+          <span class="font-medium truncate">${escapeHtml(p.direccion || 'Sin dirección')}</span>
+        </div>
+      </article>`;
+    }
     const opcionesEstado = ESTADOS.map(([valor, etiqueta]) => {
       const activo = valor === est;
       const cls = activo ? CLASES_ESTADO_ACTIVO[valor] : 'bg-surface-container text-on-surface-variant';
@@ -1008,14 +1246,14 @@ function pintarLista() {
       <div class="hidden grid grid-cols-4 gap-1" data-estados-row>${opcionesEstado}</div>
       ${p.notas ? notaPill(p.notas) : ''}
       <div class="grid grid-cols-3 gap-2 pt-2 border-t border-outline-variant/40">
-        <button data-abrir="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-primary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
-          <span class="material-symbols-outlined text-[16px]">visibility</span>Ver
+        <button data-abrir="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-primary text-xs font-semibold flex items-center justify-center active:bg-surface-container-high">
+          Detalles
         </button>
-        <a href="${nav}" target="_blank" rel="noopener" aria-label="Cómo llegar" class="min-h-[40px] rounded-xl bg-secondary text-on-secondary text-xs font-semibold flex items-center justify-center gap-1 active:opacity-90">
-          <span class="material-symbols-outlined text-[16px]">directions</span>Cómo llegar
+        <a href="${nav}" target="_blank" rel="noopener" aria-label="Cómo llegar" class="min-h-[40px] rounded-xl bg-secondary text-on-secondary text-xs font-semibold flex items-center justify-center active:opacity-90">
+          Cómo llegar
         </a>
-        <button data-ver-mapa="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-secondary text-xs font-semibold flex items-center justify-center gap-1 active:bg-surface-container-high">
-          <span class="material-symbols-outlined text-[16px]">map</span>En mapa
+        <button data-ver-mapa="${escapeHtml(p.id)}" class="min-h-[40px] rounded-xl bg-surface-container text-secondary text-xs font-semibold flex items-center justify-center active:bg-surface-container-high">
+          En mapa
         </button>
       </div>
     </article>`;
@@ -1100,7 +1338,9 @@ function initMap() {
     toast('WebGL no está disponible en este navegador', { error: true });
     return;
   }
-  let centro = [-70.6483, -33.457]; // Santiago centro (modo libre)
+  // Sin territorio/comuna: arranca en Plaza de Armas (Santiago centro) para no
+  // cargar tiles innecesarios y abrir más rápido.
+  let centro = [-70.6506, -33.4410];
   if (territorio) {
     const bb = bboxDeGeometria(territorio.territorios.geom);
     if (bb) centro = [(bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2];
@@ -1276,21 +1516,27 @@ function abrirFicha(id) {
   $('fPDVLat').value = c.lat != null ? Number(c.lat).toFixed(6) : '';
   $('fPDVLng').value = c.lng != null ? Number(c.lng).toFixed(6) : '';
   pintarBadgesFicha(p, libre);
-  pintarNotaCard(p);
 
-  $('btnPointNav').classList.toggle('hidden', !coords);
+  // Punto descartado (no_pasar): detalle de solo lectura con mensajes. Sin
+  // cambios de estado, edición, borrado ni navegación.
+  const detalleSimple = p.estado === 'no_pasar';
+  $('pointSheetCoordsRow').classList.toggle('hidden', detalleSimple);
+  $('pointSheetAcciones').classList.toggle('hidden', detalleSimple);
+  $('btnPointNav').classList.toggle('hidden', !coords || detalleSimple);
   $('btnPointMap').classList.toggle('col-span-2', !coords);
-  $('btnPointEdit').classList.toggle('hidden', libre);
-  $('btnPointDelete').classList.toggle('hidden', libre || p.user_id !== user.id);
-  $('pointSheetEstadoBox').classList.toggle('hidden', libre);
+  $('btnPointEdit').classList.toggle('hidden', libre || detalleSimple);
+  $('btnPointDelete').classList.toggle('hidden', libre || detalleSimple || p.user_id !== user.id);
+  $('pointSheetEstadoBox').classList.toggle('hidden', libre || detalleSimple);
   $('pointSheetMensajeWrap').classList.toggle('hidden', libre);
-  $('pointSheetHistorialBox').classList.remove('hidden');
+  $('pointSheetHistorialBox').classList.toggle('hidden', detalleSimple);
   $('pointSheetEdit').classList.add('hidden');
   $('btnPointSaveLabel').textContent = 'Guardar cambios';
   $('pointMensajeInput').value = '';
 
-  pintarEstadosDetalle(p.id, p.estado || 'pendiente');
-  cargarHistorial(p.id);
+  if (!detalleSimple) {
+    pintarEstadosDetalle(p.id, p.estado || 'pendiente');
+    cargarHistorial(p.id);
+  }
   sheetOpen('pointSheet');
 }
 
@@ -1305,7 +1551,6 @@ function abrirFichaNueva(lng, lat) {
   $('pointSheetBadges').innerHTML = '';
   $('pointSheetDireccion').textContent = '';
   $('pointSheetCoords').textContent = '';
-  $('pointSheetNotaBox')?.classList.add('hidden');
   $('fPDVNombre').value = '';
   $('fPDVDireccion').value = '';
   $('fPDVLat').value = Number(lat).toFixed(6);
@@ -1474,6 +1719,7 @@ async function aplicarEstado(id, estado, { silent = false, mantenerLista = false
   if (cambio) p.notas = textoEstadoLog(estado); // espejo del último movimiento
   if (!mantenerLista) pintarLista();
   pintarTarjetaTerritorio(); pintarFiltros(); actualizarCapaPuntos();
+  actualizarProgresoInicio();
 
   const { error } = await db.rpc('marcar_estado', { p_id: id, p_estado: estado });
   if (error) {
@@ -1487,6 +1733,7 @@ async function aplicarEstado(id, estado, { silent = false, mantenerLista = false
     if (cambio) p.notas = notasPrev;
     if (!mantenerLista) pintarLista();
     pintarTarjetaTerritorio(); pintarFiltros(); actualizarCapaPuntos();
+    actualizarProgresoInicio();
     toast(error.message, { error: true });
     return;
   }
@@ -1541,6 +1788,21 @@ function pintarRevision() {
   box.innerHTML = puntos.map((p) => {
     const est = p.estado || 'pendiente';
     const c = coordsDe(p);
+    // Punto que ya viene como no pasar: estado fijo (sin select de estado ni
+    // edición de notas); solo se muestra su último mensaje si tiene uno.
+    if (est === 'no_pasar') {
+      return `
+      <div class="rounded-xl bg-surface-container-low p-3 flex flex-col gap-2" data-rev="${escapeHtml(p.id)}">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex flex-col min-w-0">
+            <p class="text-sm font-semibold text-on-surface truncate">${escapeHtml(p.nombre || 'Sin nombre')}</p>
+            <p class="text-xs text-on-surface-variant truncate">${escapeHtml(p.direccion || (c ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` : 'Sin dirección'))}</p>
+          </div>
+          ${chipEstado(est)}
+        </div>
+        ${p.notas ? `<p class="text-xs text-on-surface-variant italic break-words">“${escapeHtml(p.notas)}”</p>` : ''}
+      </div>`;
+    }
     const opciones = ESTADOS.map(([valor, etiqueta]) =>
       `<option value="${valor}" ${valor === est ? 'selected' : ''}>${etiqueta}</option>`).join('');
     return `
@@ -1578,8 +1840,12 @@ function pintarRevision() {
 }
 
 async function enviarTerritorio() {
+  enviandoInforme = true;
+  revisionPendiente = false;
   sheetClose('completadoSheet');
   sheetClose('revisionSheet');
+  enviandoInforme = false;
+  actualizarFabInforme();
   await sincronizar(); // vacía la cola si hay pendientes y refresca datos
   toast('Territorio enviado a central');
 }
@@ -1639,14 +1905,14 @@ function devolverTerritorio() {
 // TABS (Mapa / Puntos / Tareas / Sync)
 // ============================================================
 function pintarTabs() {
-  const vistas = { mapa: 'mapView', ruta: 'listView', sync: 'syncView', tareas: 'tareasView' };
+  const vistas = { inicio: 'inicioView', mapa: 'mapView', ruta: 'listView', sync: 'syncView', tareas: 'tareasView' };
   for (const [tab, id] of Object.entries(vistas)) {
     $(id).classList.toggle('hidden', tab !== tabActual);
     $(id).classList.toggle('flex', tab === tabActual);
   }
   const enMapa = tabActual === 'mapa';
   $('appView').classList.toggle('map-mode', enMapa);
-  $('filtrosWrap').classList.toggle('hidden', tabActual !== 'ruta');
+  $('filtrosWrap').classList.toggle('hidden', tabActual !== 'ruta' || !territorio);
   actualizarChromeTerritorio();
   if (!enMapa) cerrarMenuMapa();
   document.querySelectorAll('.navtab').forEach((b) => {
@@ -1670,6 +1936,10 @@ function pintarTabs() {
 
 function irA(tab) { tabActual = tab; pintarTabs(); }
 document.querySelectorAll('.navtab').forEach((b) => b.addEventListener('click', () => irA(b.dataset.tab)));
+
+// Inicio: tocar la tarjeta de territorio abre Puntos (como el diseño); el pie sincroniza
+$('btnInicioTerritorio').addEventListener('click', () => irA('ruta'));
+$('btnInicioSync').addEventListener('click', () => sincronizar());
 
 // «Ver en mapa» en la vista de tareas: cambia al mapa y encuadra los puntos
 // de la tarea para navegar rápido al sector.
@@ -1709,6 +1979,7 @@ async function cargarTareas() {
   }
   tareas = data || [];
   pintarTareas();
+  if (tabActual === 'inicio') pintarInicioTareas();
   if (mapListo) actualizarCapaPuntos(); // marcadores de tarea al día
 }
 
